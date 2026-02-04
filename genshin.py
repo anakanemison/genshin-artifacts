@@ -3,6 +3,7 @@ import re
 from googleapiclient.discovery import build
 
 # Replace with your API key and spreadsheet details
+# TODO(mjschal): Securely manage API keys in public code
 API_KEY = 'REPLACE-ME'
 SPREADSHEET_ID = '1gNxZ2xab1J6o1TuNVWMeLOZ7TPOqrsf3SshP5DLvKzI'
 
