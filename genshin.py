@@ -251,10 +251,11 @@ for _, row in df_final_cleaned.iterrows():
 
 # Convert enhanced data v2 to DataFrame, write to (pipe delimited) CSV file
 df_enhanced_v2 = pd.DataFrame(enhanced_data_v2)
-df_enhanced_v2.to_csv("output.csv", index=False, sep='|')
+os.makedirs("output", exist_ok=True)
+df_enhanced_v2.to_csv("output/output.csv", index=False, sep='|')
 
 # Write summary info to txt file for human review
-with open('summary.txt', 'w', encoding='utf-8') as file:
+with open('output/summary.txt', 'w', encoding='utf-8') as file:
     df_enhanced_v2.info(buf=file)
     file.write('\n\n')
 

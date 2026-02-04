@@ -7,3 +7,6 @@
 # Python
 __pycache__/
 *.pyc
+
+# Script output
+output/
