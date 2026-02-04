@@ -1,10 +1,12 @@
+import os
 import pandas as pd
 import re
+from dotenv import load_dotenv
 from googleapiclient.discovery import build
 
-# Replace with your API key and spreadsheet details
-# TODO(mjschal): Securely manage API keys in public code
-API_KEY = 'REPLACE-ME'
+load_dotenv()
+
+API_KEY = os.environ['GOOGLE_API_KEY']
 SPREADSHEET_ID = '1gNxZ2xab1J6o1TuNVWMeLOZ7TPOqrsf3SshP5DLvKzI'
 
 # Initialize Google Sheets API
