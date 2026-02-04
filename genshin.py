@@ -9,6 +9,21 @@ load_dotenv()
 API_KEY = os.environ['GOOGLE_API_KEY']
 SPREADSHEET_ID = '1gNxZ2xab1J6o1TuNVWMeLOZ7TPOqrsf3SshP5DLvKzI'
 
+# Validation counters for summary
+validation_counts = {
+    'rows_fetched': 0,
+    'rows_after_header_trim': 0,
+    'rows_filtered_keywords': 0,
+    'rows_after_keyword_filter': 0,
+    'rows_missing_data': 0,
+    'rows_with_meaningful_data': 0,
+    'artifact_lines_no_rank': 0,
+    'main_stat_lines_no_slot': 0,
+    'substat_lines_no_rank': 0,
+    'skipped_duplicate_main_substat': 0,
+    'final_output_rows': 0,
+}
+
 # Initialize Google Sheets API
 service = build('sheets', 'v4', developerKey=API_KEY)
 sheet = service.spreadsheets()
@@ -34,6 +49,7 @@ dfs = []
 
 for i, value_range in enumerate(response['valueRanges']):
     df = pd.DataFrame(value_range['values'])
+    validation_counts['rows_fetched'] += len(df)
 
     # Rename TRAVELER rows in column 1
     df.iloc[:, 1] = df.iloc[:, 1].apply(
@@ -42,6 +58,7 @@ for i, value_range in enumerate(response['valueRanges']):
 
     # Trim the first 5 rows (0-indexed)
     df_trimmed = df.iloc[5:].reset_index(drop=True)
+    validation_counts['rows_after_header_trim'] += len(df_trimmed)
     dfs.append(df_trimmed)
 
 # Concatenate all the trimmed dataframes into one final dataframe
@@ -51,9 +68,11 @@ df_trimmed = pd.concat(dfs, ignore_index=True)
 filter_keywords = ["4 STAR", "5 STAR", "NOTES"]
 
 df_cleaned = df_trimmed[
-    ~df_trimmed[1].isin(filter_keywords) & 
+    ~df_trimmed[1].isin(filter_keywords) &
     ~df_trimmed[1].astype(str).str.startswith("Last Updated:")
 ].reset_index(drop=True)
+validation_counts['rows_filtered_keywords'] = len(df_trimmed) - len(df_cleaned)
+validation_counts['rows_after_keyword_filter'] = len(df_cleaned)
 
 # Step 3: Identify character blocks (non-empty strings in column '1' are character names)
 parsed_blocks = []
@@ -80,6 +99,8 @@ df_final_cleaned = df_parsed[
     .notnull()
     .any(axis=1)
 ].reset_index(drop=True)
+validation_counts['rows_missing_data'] = len(df_parsed) - len(df_final_cleaned)
+validation_counts['rows_with_meaningful_data'] = len(df_final_cleaned)
 
 # Normalize multiline text fields, collapse multiple spaces
 for col in ['Artifact Sets', 'Main Stats', 'Substats']:
@@ -218,6 +239,7 @@ for _, row in df_final_cleaned.iterrows():
     for artifact_sets_line in artifact_sets_lines:
         artifact_rank, artifact_set_names_text = extract_rank(artifact_sets_line)
         if artifact_rank is None:
+            validation_counts['artifact_lines_no_rank'] += 1
             continue
         artifact_set_names = clean_and_split_artifact_set_names(artifact_set_names_text)
         for artifact_set_name in artifact_set_names:
@@ -226,16 +248,19 @@ for _, row in df_final_cleaned.iterrows():
                 slot_stat_parts = main_stat_line.split(" - ")
                 slot = slot_stat_parts[0].strip() if len(slot_stat_parts) > 1 else None
                 if slot is None:
+                    validation_counts['main_stat_lines_no_slot'] += 1
                     continue
                 main_stats = clean_and_split_stats(slot_stat_parts[1]) if len(slot_stat_parts) > 1 else []
                 for stat in main_stats:
                     for substat_line in substat_lines:
                         substat_rank, substat_text = extract_rank(substat_line)
                         if substat_rank is None:
+                            validation_counts['substat_lines_no_rank'] += 1
                             continue
                         substat_names = clean_and_split_stats(substat_text)
                         for substat_name in substat_names:
                             if stat == substat_name:
+                                validation_counts['skipped_duplicate_main_substat'] += 1
                                 continue  # Skip duplicate main and substats; can't be rolled
                             enhanced_data_v2.append({
                                 "Character": character,
@@ -251,13 +276,105 @@ for _, row in df_final_cleaned.iterrows():
 
 # Convert enhanced data v2 to DataFrame, write to (pipe delimited) CSV file
 df_enhanced_v2 = pd.DataFrame(enhanced_data_v2)
+validation_counts['final_output_rows'] = len(df_enhanced_v2)
 os.makedirs("output", exist_ok=True)
 df_enhanced_v2.to_csv("output/output.csv", index=False, sep='|')
 
+
+# Helper functions for summary analysis
+def find_low_frequency_values(series, threshold=2):
+    """Find values that appear <= threshold times (potential typos/uncanonicalized)."""
+    counts = series.value_counts()
+    return counts[counts <= threshold].sort_values()
+
+
+def find_suspicious_strings(series):
+    """Find values containing patterns that suggest incomplete cleanup."""
+    suspicious_patterns = [
+        (r'[~≈]', 'contains ~ or ≈'),
+        (r'[\[\]]', 'contains brackets []'),
+        (r'\*', 'contains asterisk'),
+        (r'\d+%', 'contains percentage (may need expansion)'),
+        (r'.{50,}', 'very long string (>50 chars)'),
+    ]
+    results = []
+    for value in series.unique():
+        if not isinstance(value, str):
+            continue
+        for pattern, reason in suspicious_patterns:
+            if re.search(pattern, value):
+                results.append((value, reason))
+                break  # Only report first matching reason per value
+    return results
+
 # Write summary info to txt file for human review
 with open('output/summary.txt', 'w', encoding='utf-8') as file:
+    # Section: Validation Counts (E)
+    file.write('=' * 60 + '\n')
+    file.write('VALIDATION COUNTS\n')
+    file.write('=' * 60 + '\n')
+    file.write(f"Rows fetched from API:          {validation_counts['rows_fetched']}\n")
+    file.write(f"Rows after header trim:         {validation_counts['rows_after_header_trim']}\n")
+    file.write(f"Rows filtered (keywords):       {validation_counts['rows_filtered_keywords']}\n")
+    file.write(f"Rows after keyword filter:      {validation_counts['rows_after_keyword_filter']}\n")
+    file.write(f"Rows missing data:              {validation_counts['rows_missing_data']}\n")
+    file.write(f"Rows with meaningful data:      {validation_counts['rows_with_meaningful_data']}\n")
+    file.write(f"Artifact lines without rank:    {validation_counts['artifact_lines_no_rank']}\n")
+    file.write(f"Main stat lines without slot:   {validation_counts['main_stat_lines_no_slot']}\n")
+    file.write(f"Substat lines without rank:     {validation_counts['substat_lines_no_rank']}\n")
+    file.write(f"Skipped (main=substat):         {validation_counts['skipped_duplicate_main_substat']}\n")
+    file.write(f"Final output rows:              {validation_counts['final_output_rows']}\n")
+    file.write('\n')
+
+    # Section: Suspicious Strings (B)
+    file.write('=' * 60 + '\n')
+    file.write('SUSPICIOUS STRINGS (may need cleanup)\n')
+    file.write('=' * 60 + '\n')
+    suspicious_found = False
+    for col_name, col_label in [('Artifact Set', 'Artifact Sets'),
+                                 ('Main Stat', 'Main Stats'),
+                                 ('Substat', 'Substats'),
+                                 ('Character', 'Characters'),
+                                 ('Role', 'Roles')]:
+        suspicious = find_suspicious_strings(df_enhanced_v2[col_name])
+        if suspicious:
+            suspicious_found = True
+            file.write(f"\n{col_label}:\n")
+            for value, reason in suspicious:
+                file.write(f"  - \"{value}\" ({reason})\n")
+    if not suspicious_found:
+        file.write("None found.\n")
+    file.write('\n')
+
+    # Section: Low Frequency Values (A)
+    file.write('=' * 60 + '\n')
+    file.write('LOW FREQUENCY VALUES (count <= 2, may be typos)\n')
+    file.write('=' * 60 + '\n')
+    low_freq_found = False
+    for col_name, col_label in [('Artifact Set', 'Artifact Sets'),
+                                 ('Main Stat', 'Main Stats'),
+                                 ('Substat', 'Substats')]:
+        low_freq = find_low_frequency_values(df_enhanced_v2[col_name])
+        if len(low_freq) > 0:
+            low_freq_found = True
+            file.write(f"\n{col_label}:\n")
+            for value, count in low_freq.items():
+                file.write(f"  - \"{value}\" (count: {count})\n")
+    if not low_freq_found:
+        file.write("None found.\n")
+    file.write('\n')
+
+    # Section: DataFrame info
+    file.write('=' * 60 + '\n')
+    file.write('DATAFRAME INFO\n')
+    file.write('=' * 60 + '\n')
     df_enhanced_v2.info(buf=file)
     file.write('\n\n')
+
+    # Section: Unique value counts
+    file.write('=' * 60 + '\n')
+    file.write('UNIQUE VALUE COUNTS\n')
+    file.write('=' * 60 + '\n\n')
 
     file.write('UNIQUE CHARACTERS\n')
     character_lines = pd.DataFrame(sorted(df_enhanced_v2['Character'].value_counts().items()), columns=['Name', 'Count'])
