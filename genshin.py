@@ -65,7 +65,7 @@ for i, value_range in enumerate(response['valueRanges']):
 df_trimmed = pd.concat(dfs, ignore_index=True)
 
 # Step 2: Filter out unwanted rows (e.g., "4 STAR", "5 STAR", "NOTES", and "Last Updated:" rows)
-filter_keywords = ["4 STAR", "5 STAR", "NOTES"]
+filter_keywords = ["4 STAR", "5 STAR", "NOTES", "*portrait \npending*"]
 
 df_cleaned = df_trimmed[
     ~df_trimmed[1].isin(filter_keywords) &
@@ -130,10 +130,12 @@ def clean_and_split_artifact_set_names(artifact_sets_names_text):
         # Use "|" as a consistent separator
         ["/", "|"],
         ["+", "|"],
-        [" and ", "|"],  # ...risky. Seems likely to end up in an artifact set name someday
+        # Formerly included " and " which is now in an artifact set name, alas
         ["~=", "|"],
         ["≈", "|"],
-        ["(2)", "|"],  # number parentheticals sometimes act as separators
+        ["(2) [Choose One] and", "|"],  # number parentheticals (and other dirt) sometimes act as separators
+        ["(2) and", "|"],
+        ["(2)", "|"],
         ["(4)", "|"],
 
         # Remove garbage
@@ -142,9 +144,10 @@ def clean_and_split_artifact_set_names(artifact_sets_names_text):
         ["[Choose two]", ""],
         ["[see notes]", ""],
         ["Mixes of", ""],
-        ["Furina Teams only, performs as well or better than Nighttime Whispers in the Echoing Woods", ""],
+        ["Furina teams only, performs as well or better than Nighttime Whispers in the Echoing Woods", ""],
         ["Other damaging options (see DPS)", ""],
         ["*", ""],
+        ["(Crit Rate secondary stat weapon only)", ""],
 
         # Canonicalize names
         ["15% Anemo DMG Set", "15% Anemo DMG set"],
@@ -153,6 +156,7 @@ def clean_and_split_artifact_set_names(artifact_sets_names_text):
         ["15% Hydro DMG Bonus set", "15% Hydro DMG set"],
         ["18 ATK% set", "18% ATK set"],
         ["18% ATK Set", "18% ATK set"],
+        ["20% ER Set", "20% Energy Recharge set"],
         ["20% ER set", "20% Energy Recharge set"],
         ["20% HP", "20% HP set"],
         ["20% HP set set", "20% HP set"],  # alas again
@@ -161,9 +165,12 @@ def clean_and_split_artifact_set_names(artifact_sets_names_text):
         ["Emblem Of Severed Fate", "Emblem of Severed Fate"],
         ["Marechausse Hunter", "Marechaussee Hunter"],
         ["Ocean Hued Clam", "Ocean-Hued Clam"],
+        ["Desert Pavillion Chronicle", "Desert Pavilion Chronicle"],
+        ["Silken Moon Serenade", "Silken Moon's Serenade"],
 
         # Set category expansions; assume only 5 star sets matter
         ["15% Anemo DMG set", "15% Anemo DMG set|Viridescent Venerer|Desert Pavilion Chronicle"],
+        ["15% Cryo DMG set", "15% Cryo DMG set|Blizzard Strayer|Finale of the Deep Galleries"],
         ["15% Healing Bonus set", "15% Healing Bonus set|Maiden Beloved|Ocean-Hued Clam|Song of Days Past"],
         ["15% Hydro DMG set", "15% Hydro DMG set|Heart of Depth|Nymph's Dream"],
         ["18% ATK set", "18% ATK set|Gladiator's Finale|Shimenawa's Reminiscence|Vermillion Hereafter|Echoes of an Offering|Nighttime Whispers in the Echoing Woods|Fragment of Harmonic Whimsy|Unfinished Reverie"],
