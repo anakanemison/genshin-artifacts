@@ -295,8 +295,24 @@ def find_low_frequency_values(series, threshold=2):
     return counts[counts <= threshold].sort_values()
 
 
-def find_suspicious_strings(series):
+# Canonical artifact set category names that intentionally contain percentages
+ARTIFACT_SET_CATEGORIES = {
+    "15% Anemo DMG set",
+    "15% Cryo DMG set",
+    "15% Healing Bonus set",
+    "15% Hydro DMG set",
+    "18% ATK set",
+    "20% Energy Recharge set",
+    "20% HP set",
+    "25% Physical DMG set",
+    "80 EM set",
+}
+
+
+def find_suspicious_strings(series, allowed_percentages=None):
     """Find values containing patterns that suggest incomplete cleanup."""
+    if allowed_percentages is None:
+        allowed_percentages = set()
     suspicious_patterns = [
         (r'[~≈]', 'contains ~ or ≈'),
         (r'[\[\]]', 'contains brackets []'),
@@ -310,6 +326,9 @@ def find_suspicious_strings(series):
             continue
         for pattern, reason in suspicious_patterns:
             if re.search(pattern, value):
+                # Skip percentage check for known canonical category names
+                if 'percentage' in reason and value in allowed_percentages:
+                    continue
                 results.append((value, reason))
                 break  # Only report first matching reason per value
     return results
@@ -343,7 +362,9 @@ with open('output/summary.txt', 'w', encoding='utf-8') as file:
                                  ('Substat', 'Substats'),
                                  ('Character', 'Characters'),
                                  ('Role', 'Roles')]:
-        suspicious = find_suspicious_strings(df_enhanced_v2[col_name])
+        # Exclude known canonical artifact set categories from percentage check
+        allowed = ARTIFACT_SET_CATEGORIES if col_name == 'Artifact Set' else None
+        suspicious = find_suspicious_strings(df_enhanced_v2[col_name], allowed)
         if suspicious:
             suspicious_found = True
             file.write(f"\n{col_label}:\n")
