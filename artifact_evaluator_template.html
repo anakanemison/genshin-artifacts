@@ -951,7 +951,8 @@
                                             if (state.focusedSubstat) {
                                                 const isFocused = state.focusedSubstat.slot === slotName &&
                                                                   state.focusedSubstat.mainStat === ms.mainStat &&
-                                                                  state.focusedSubstat.substat === s.substat;
+                                                                  state.focusedSubstat.substat === s.substat &&
+                                                                  state.focusedSubstat.rank === s.rank;
                                                 if (isFocused) {
                                                     cssClass += ' focused';
                                                 } else {
@@ -964,7 +965,7 @@
                                                 }
                                             }
                                             return `
-                                                <span class="${cssClass}" data-slot="${slotName}" data-mainstat="${ms.mainStat}" data-substat="${s.substat}">
+                                                <span class="${cssClass}" data-slot="${slotName}" data-mainstat="${ms.mainStat}" data-substat="${s.substat}" data-rank="${s.rank}">
                                                     <span class="substat-rank rank-${Math.min(s.rank, 5)}">${s.rank}</span>
                                                     ${s.substat}
                                                 </span>
@@ -994,7 +995,8 @@
                     const slot = el.dataset.slot;
                     const mainStat = el.dataset.mainstat;
                     const substat = el.dataset.substat;
-                    toggleSubstatFocus(slot, mainStat, substat);
+                    const rank = parseInt(el.dataset.rank);
+                    toggleSubstatFocus(slot, mainStat, substat, rank);
                 });
             });
         }
@@ -1013,15 +1015,16 @@
             render();
         }
 
-        function toggleSubstatFocus(slot, mainStat, substat) {
-            // Toggle: if clicking same substat, clear focus
+        function toggleSubstatFocus(slot, mainStat, substat, rank) {
+            // Toggle: if clicking same substat+rank, clear focus
             if (state.focusedSubstat &&
                 state.focusedSubstat.slot === slot &&
                 state.focusedSubstat.mainStat === mainStat &&
-                state.focusedSubstat.substat === substat) {
+                state.focusedSubstat.substat === substat &&
+                state.focusedSubstat.rank === rank) {
                 state.focusedSubstat = null;
             } else {
-                state.focusedSubstat = { slot, mainStat, substat };
+                state.focusedSubstat = { slot, mainStat, substat, rank };
             }
             render();
         }
@@ -1050,22 +1053,6 @@
             const chars = filterCharacters(artifactData.characters);
             const subs = filterSubstats(artifactData.substats);
 
-            // Compute which substats the focused character+role wants
-            let focusedSubstats = new Set();
-            if (state.focusedCharRole) {
-                subs.forEach(s => {
-                    if (s.characterRoles) {
-                        const wantsIt = s.characterRoles.some(cr =>
-                            cr.character === state.focusedCharRole.character &&
-                            cr.role === state.focusedCharRole.role
-                        );
-                        if (wantsIt) {
-                            focusedSubstats.add(s.substat);
-                        }
-                    }
-                });
-            }
-
             // Verdict
             elements.verdictCount.textContent = chars.length;
             elements.verdictText.textContent = chars.length === 1 ? 'character' : 'characters';
@@ -1093,13 +1080,14 @@
                 if (filteredCharRoles.length === 0) return '';
 
                 // Determine row CSS class based on focus state
+                // Check if the focused character+role wants this specific substat+rank
                 let rowClass = '';
                 if (state.focusedCharRole) {
-                    if (focusedSubstats.has(s.substat)) {
-                        rowClass = 'highlighted-row';
-                    } else {
-                        rowClass = 'dimmed-row';
-                    }
+                    const wantsThisSubstat = (s.characterRoles || []).some(cr =>
+                        cr.character === state.focusedCharRole.character &&
+                        cr.role === state.focusedCharRole.role
+                    );
+                    rowClass = wantsThisSubstat ? 'highlighted-row' : 'dimmed-row';
                 }
 
                 return `
