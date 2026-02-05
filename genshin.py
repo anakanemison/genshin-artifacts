@@ -363,16 +363,19 @@ def generate_web_json(df):
                         })
                 ms_char_list.sort(key=lambda x: (x['setRank'], x['character']))
 
-                # Substats for this main stat
-                substat_data = ms_df.groupby(['Substat', 'Substat Rank']).agg({
-                    'Character': lambda x: list(set(x))
-                }).reset_index()
+                # Substats for this main stat - include character+role pairs
+                substat_data = ms_df.groupby(['Substat', 'Substat Rank']).apply(
+                    lambda g: g[['Character', 'Role']].drop_duplicates().to_dict('records')
+                ).reset_index(name='char_roles')
                 substats_list = []
                 for _, row in substat_data.iterrows():
+                    char_roles = [{'character': cr['Character'], 'role': cr['Role']}
+                                  for cr in row['char_roles']]
+                    char_roles.sort(key=lambda x: (x['character'], x['role']))
                     substats_list.append({
                         'substat': row['Substat'],
                         'rank': int(row['Substat Rank']),
-                        'characters': row['Character']
+                        'characterRoles': char_roles
                     })
                 substats_list.sort(key=lambda x: (x['rank'], x['substat']))
 
@@ -414,16 +417,19 @@ def generate_web_json(df):
                         })
                 char_list.sort(key=lambda x: (x['setRank'], x['character']))
 
-                # Substats with character attribution
-                sub_data = ms_df.groupby(['Substat', 'Substat Rank']).agg({
-                    'Character': lambda x: sorted(list(set(x)))
-                }).reset_index()
+                # Substats with character+role attribution
+                sub_data = ms_df.groupby(['Substat', 'Substat Rank']).apply(
+                    lambda g: g[['Character', 'Role']].drop_duplicates().to_dict('records')
+                ).reset_index(name='char_roles')
                 sub_list = []
                 for _, row in sub_data.iterrows():
+                    char_roles = [{'character': cr['Character'], 'role': cr['Role']}
+                                  for cr in row['char_roles']]
+                    char_roles.sort(key=lambda x: (x['character'], x['role']))
                     sub_list.append({
                         'substat': row['Substat'],
                         'rank': int(row['Substat Rank']),
-                        'characters': row['Character']
+                        'characterRoles': char_roles
                     })
                 sub_list.sort(key=lambda x: (x['rank'], x['substat']))
 

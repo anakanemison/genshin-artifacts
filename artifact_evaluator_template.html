@@ -354,6 +354,15 @@
             font-weight: 500;
         }
 
+        .main-stat-link {
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .main-stat-link:hover {
+            color: var(--accent);
+        }
+
         .main-stat-count {
             font-size: 0.8rem;
             color: var(--text-secondary);
@@ -400,6 +409,30 @@
             font-weight: 600;
         }
 
+        .substat-tag {
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+
+        .substat-tag:hover {
+            background: rgba(255,255,255,0.15);
+        }
+
+        .substat-tag.focused {
+            border-color: var(--accent);
+            background: rgba(233, 69, 96, 0.2);
+        }
+
+        .substat-tag.highlighted {
+            background: rgba(74, 222, 128, 0.2);
+            box-shadow: 0 0 6px rgba(74, 222, 128, 0.4);
+        }
+
+        .substat-tag.dimmed {
+            opacity: 0.35;
+        }
+
         /* Character chips in substat table */
         .char-chips {
             display: flex;
@@ -412,6 +445,36 @@
             background: rgba(255,255,255,0.1);
             border-radius: 3px;
             font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+
+        .char-chip:hover {
+            background: rgba(255,255,255,0.2);
+        }
+
+        .char-chip.focused {
+            border-color: var(--accent);
+            background: rgba(233, 69, 96, 0.2);
+        }
+
+        .char-chip.highlighted {
+            background: rgba(74, 222, 128, 0.2);
+            box-shadow: 0 0 4px rgba(74, 222, 128, 0.4);
+        }
+
+        .char-chip.dimmed {
+            opacity: 0.35;
+        }
+
+        /* Row highlighting for evaluate substats table */
+        tr.highlighted-row {
+            background: rgba(74, 222, 128, 0.1);
+        }
+
+        tr.dimmed-row {
+            opacity: 0.35;
         }
 
         /* Loading */
@@ -629,7 +692,11 @@
             slot: '',
             mainStat: '',
             preferredOnly: false,
-            substatThreshold: 3
+            substatThreshold: 3,
+            // Focus state for substat highlighting in Browse tab
+            focusedSubstat: null,  // { slot, mainStat, substat } or null
+            // Focus state for character highlighting in Evaluate tab
+            focusedCharRole: null  // { character, role } or null
         };
 
         // DOM elements
@@ -701,6 +768,9 @@
             elements.tabs.forEach(tab => {
                 tab.addEventListener('click', () => {
                     state.tab = tab.dataset.tab;
+                    // Clear focus states when switching tabs
+                    state.focusedSubstat = null;
+                    state.focusedCharRole = null;
                     updateTabs();
                     render();
                 });
@@ -709,18 +779,23 @@
             // Filters
             elements.setFilter.addEventListener('change', (e) => {
                 state.set = e.target.value;
+                // Clear focus states when changing set
+                state.focusedSubstat = null;
+                state.focusedCharRole = null;
                 render();
             });
 
             elements.slotFilter.addEventListener('change', (e) => {
                 state.slot = e.target.value;
                 state.mainStat = '';
+                state.focusedCharRole = null;
                 populateMainStatDropdown();
                 render();
             });
 
             elements.mainstatFilter.addEventListener('change', (e) => {
                 state.mainStat = e.target.value;
+                state.focusedCharRole = null;
                 render();
             });
 
@@ -738,6 +813,22 @@
                     btn.classList.add('active');
                     render();
                 });
+            });
+
+            // Clear focus when clicking outside substat tags in Browse view
+            elements.slotBreakdown.addEventListener('click', (e) => {
+                if (!e.target.closest('.substat-tag') && state.focusedSubstat) {
+                    state.focusedSubstat = null;
+                    render();
+                }
+            });
+
+            // Clear focus when clicking outside character chips in Evaluate view
+            document.getElementById('evaluate-content').addEventListener('click', (e) => {
+                if (!e.target.closest('.char-chip') && state.focusedCharRole) {
+                    state.focusedCharRole = null;
+                    render();
+                }
             });
         }
 
@@ -804,6 +895,22 @@
 
         function renderSlotBreakdown(slots) {
             const slotOrder = ['Sands', 'Goblet', 'Circlet'];
+
+            // Compute highlighted character+role keys if there's a focused substat
+            let focusedCharRoleKeys = new Set();
+            if (state.focusedSubstat) {
+                const { slot, mainStat, substat } = state.focusedSubstat;
+                const slotData = slots[slot];
+                if (slotData && slotData[mainStat]) {
+                    const sub = slotData[mainStat].substats.find(s => s.substat === substat);
+                    if (sub && sub.characterRoles) {
+                        sub.characterRoles.forEach(cr => {
+                            focusedCharRoleKeys.add(`${cr.character}|${cr.role}`);
+                        });
+                    }
+                }
+            }
+
             elements.slotBreakdown.innerHTML = slotOrder.map(slotName => {
                 const slotData = slots[slotName];
                 if (!slotData) return '';
@@ -831,19 +938,38 @@
                             ${mainStats.map(ms => `
                                 <div class="main-stat-item">
                                     <div class="main-stat-name">
-                                        <span>${ms.mainStat}</span>
+                                        <span class="main-stat-link" data-slot="${slotName}" data-mainstat="${ms.mainStat}">${ms.mainStat}</span>
                                         <span class="main-stat-count">${ms.count} char${ms.count !== 1 ? 's' : ''}</span>
                                     </div>
                                     <div class="main-stat-bar">
                                         <div class="main-stat-bar-fill" style="width: ${(ms.count / maxCount * 100)}%"></div>
                                     </div>
                                     <div class="substat-tags">
-                                        ${ms.subs.map(s => `
-                                            <span class="substat-tag">
-                                                <span class="substat-rank rank-${Math.min(s.rank, 5)}">${s.rank}</span>
-                                                ${s.substat}
-                                            </span>
-                                        `).join('')}
+                                        ${ms.subs.map(s => {
+                                            // Determine CSS class for this substat tag
+                                            let cssClass = 'substat-tag';
+                                            if (state.focusedSubstat) {
+                                                const isFocused = state.focusedSubstat.slot === slotName &&
+                                                                  state.focusedSubstat.mainStat === ms.mainStat &&
+                                                                  state.focusedSubstat.substat === s.substat;
+                                                if (isFocused) {
+                                                    cssClass += ' focused';
+                                                } else {
+                                                    // Check if this substat shares any character+role with focused
+                                                    const subCharRoles = s.characterRoles || [];
+                                                    const sharesCharRole = subCharRoles.some(cr =>
+                                                        focusedCharRoleKeys.has(`${cr.character}|${cr.role}`)
+                                                    );
+                                                    cssClass += sharesCharRole ? ' highlighted' : ' dimmed';
+                                                }
+                                            }
+                                            return `
+                                                <span class="${cssClass}" data-slot="${slotName}" data-mainstat="${ms.mainStat}" data-substat="${s.substat}">
+                                                    <span class="substat-rank rank-${Math.min(s.rank, 5)}">${s.rank}</span>
+                                                    ${s.substat}
+                                                </span>
+                                            `;
+                                        }).join('')}
                                     </div>
                                 </div>
                             `).join('')}
@@ -851,6 +977,53 @@
                     </div>
                 `;
             }).join('');
+
+            // Bind click handlers for main stat links
+            document.querySelectorAll('.main-stat-link').forEach(el => {
+                el.addEventListener('click', (e) => {
+                    const slot = e.target.dataset.slot;
+                    const mainStat = e.target.dataset.mainstat;
+                    navigateToEvaluate(slot, mainStat);
+                });
+            });
+
+            // Bind click handlers for substat tags
+            document.querySelectorAll('#slot-breakdown .substat-tag').forEach(el => {
+                el.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const slot = el.dataset.slot;
+                    const mainStat = el.dataset.mainstat;
+                    const substat = el.dataset.substat;
+                    toggleSubstatFocus(slot, mainStat, substat);
+                });
+            });
+        }
+
+        function navigateToEvaluate(slot, mainStat) {
+            state.tab = 'evaluate';
+            state.slot = slot;
+            state.mainStat = mainStat;
+            state.focusedSubstat = null;
+
+            // Update UI
+            elements.slotFilter.value = slot;
+            populateMainStatDropdown();
+            elements.mainstatFilter.value = mainStat;
+            updateTabs();
+            render();
+        }
+
+        function toggleSubstatFocus(slot, mainStat, substat) {
+            // Toggle: if clicking same substat, clear focus
+            if (state.focusedSubstat &&
+                state.focusedSubstat.slot === slot &&
+                state.focusedSubstat.mainStat === mainStat &&
+                state.focusedSubstat.substat === substat) {
+                state.focusedSubstat = null;
+            } else {
+                state.focusedSubstat = { slot, mainStat, substat };
+            }
+            render();
         }
 
         function renderEvaluate() {
@@ -877,6 +1050,22 @@
             const chars = filterCharacters(artifactData.characters);
             const subs = filterSubstats(artifactData.substats);
 
+            // Compute which substats the focused character+role wants
+            let focusedSubstats = new Set();
+            if (state.focusedCharRole) {
+                subs.forEach(s => {
+                    if (s.characterRoles) {
+                        const wantsIt = s.characterRoles.some(cr =>
+                            cr.character === state.focusedCharRole.character &&
+                            cr.role === state.focusedCharRole.role
+                        );
+                        if (wantsIt) {
+                            focusedSubstats.add(s.substat);
+                        }
+                    }
+                });
+            }
+
             // Verdict
             elements.verdictCount.textContent = chars.length;
             elements.verdictText.textContent = chars.length === 1 ? 'character' : 'characters';
@@ -890,30 +1079,74 @@
                 </tr>
             `).join('') : '<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">No characters match filters</td></tr>';
 
-            // Substats table
+            // Substats table with character chips that have tooltips and click handlers
             elements.substatsTable.innerHTML = subs.length > 0 ? subs.map(s => {
-                // Filter characters by preferred if needed
-                let subChars = s.characters;
+                // Get character+role pairs for this substat
+                const charRoles = s.characterRoles || [];
+                // Filter by preferred if needed
+                let filteredCharRoles = charRoles;
                 if (state.preferredOnly) {
-                    subChars = s.characters.filter(charName => {
-                        return chars.some(c => c.character === charName);
-                    });
+                    filteredCharRoles = charRoles.filter(cr =>
+                        chars.some(c => c.character === cr.character)
+                    );
                 }
-                if (subChars.length === 0) return '';
+                if (filteredCharRoles.length === 0) return '';
+
+                // Determine row CSS class based on focus state
+                let rowClass = '';
+                if (state.focusedCharRole) {
+                    if (focusedSubstats.has(s.substat)) {
+                        rowClass = 'highlighted-row';
+                    } else {
+                        rowClass = 'dimmed-row';
+                    }
+                }
 
                 return `
-                    <tr>
+                    <tr class="${rowClass}">
                         <td>${s.substat}</td>
                         <td><span class="rank rank-${Math.min(s.rank, 5)}">${s.rank}</span></td>
                         <td>
                             <div class="char-chips">
-                                ${subChars.slice(0, 10).map(c => `<span class="char-chip">${c}</span>`).join('')}
-                                ${subChars.length > 10 ? `<span class="char-chip">+${subChars.length - 10} more</span>` : ''}
+                                ${filteredCharRoles.slice(0, 10).map(cr => {
+                                    let chipClass = 'char-chip';
+                                    if (state.focusedCharRole) {
+                                        const isFocused = cr.character === state.focusedCharRole.character &&
+                                                          cr.role === state.focusedCharRole.role;
+                                        if (isFocused) {
+                                            chipClass += ' focused';
+                                        }
+                                    }
+                                    return `<span class="${chipClass}" title="${cr.role}" data-character="${cr.character}" data-role="${cr.role}">${cr.character}</span>`;
+                                }).join('')}
+                                ${filteredCharRoles.length > 10 ? `<span class="char-chip" style="cursor: default;">+${filteredCharRoles.length - 10} more</span>` : ''}
                             </div>
                         </td>
                     </tr>
                 `;
             }).filter(Boolean).join('') : '<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">No substats match threshold</td></tr>';
+
+            // Bind click handlers for character chips
+            document.querySelectorAll('#substats-table .char-chip[data-character]').forEach(el => {
+                el.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const character = el.dataset.character;
+                    const role = el.dataset.role;
+                    toggleCharRoleFocus(character, role);
+                });
+            });
+        }
+
+        function toggleCharRoleFocus(character, role) {
+            // Toggle: if clicking same character+role, clear focus
+            if (state.focusedCharRole &&
+                state.focusedCharRole.character === character &&
+                state.focusedCharRole.role === role) {
+                state.focusedCharRole = null;
+            } else {
+                state.focusedCharRole = { character, role };
+            }
+            render();
         }
 
         // Start
