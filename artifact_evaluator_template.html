@@ -96,12 +96,6 @@
             gap: 1.5rem;
         }
 
-        @media (max-width: 900px) {
-            .main-layout {
-                grid-template-columns: 1fr;
-            }
-        }
-
         /* Sidebar / Filters */
         .sidebar {
             background: var(--bg-secondary);
@@ -110,6 +104,16 @@
             height: fit-content;
             position: sticky;
             top: 1rem;
+        }
+
+        @media (max-width: 900px) {
+            .main-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                position: static;
+            }
         }
 
         .filter-group {
