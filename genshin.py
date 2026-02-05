@@ -1,3 +1,4 @@
+import json
 import os
 import pandas as pd
 import re
@@ -286,6 +287,170 @@ df_enhanced_v2 = pd.DataFrame(enhanced_data_v2)
 validation_counts['final_output_rows'] = len(df_enhanced_v2)
 os.makedirs("output", exist_ok=True)
 df_enhanced_v2.to_csv("output/output.csv", index=False, sep='|')
+
+
+def generate_web_json(df):
+    """Generate optimized JSON for the web artifact evaluator."""
+    # Build meta information
+    sets = sorted(df['Artifact Set'].unique().tolist())
+    slots = sorted(df['Artifact Slot'].unique().tolist())
+    characters = sorted(df['Character'].unique().tolist())
+    substats = sorted(df['Substat'].unique().tolist())
+
+    # Main stats per slot
+    main_stats_by_slot = {}
+    for slot in slots:
+        main_stats_by_slot[slot] = sorted(
+            df[df['Artifact Slot'] == slot]['Main Stat'].unique().tolist()
+        )
+
+    meta = {
+        'sets': sets,
+        'slots': slots,
+        'characters': characters,
+        'substats': substats,
+        'mainStatsBySlot': main_stats_by_slot
+    }
+
+    # Build bySet index: set → characters + slot breakdowns
+    by_set = {}
+    for artifact_set in sets:
+        set_df = df[df['Artifact Set'] == artifact_set]
+
+        # Get unique character/role combinations for this set
+        char_roles = set_df.groupby(['Character', 'Role', 'Preferred Role', 'Artifact Set Rank']).size().reset_index()
+        characters_list = []
+        seen_char_roles = set()
+        for _, row in char_roles.iterrows():
+            key = (row['Character'], row['Role'])
+            if key not in seen_char_roles:
+                seen_char_roles.add(key)
+                characters_list.append({
+                    'character': row['Character'],
+                    'role': row['Role'],
+                    'preferred': bool(row['Preferred Role']),
+                    'setRank': int(row['Artifact Set Rank'])
+                })
+
+        # Sort by setRank, then character name
+        characters_list.sort(key=lambda x: (x['setRank'], x['character']))
+
+        # Build slot breakdown
+        slot_breakdown = {}
+        for slot in slots:
+            slot_df = set_df[set_df['Artifact Slot'] == slot]
+            if slot_df.empty:
+                continue
+
+            # Main stats for this slot
+            main_stat_data = {}
+            for main_stat in slot_df['Main Stat'].unique():
+                ms_df = slot_df[slot_df['Main Stat'] == main_stat]
+
+                # Characters wanting this main stat
+                ms_chars = ms_df.groupby(['Character', 'Role', 'Preferred Role', 'Artifact Set Rank']).size().reset_index()
+                ms_char_list = []
+                seen = set()
+                for _, row in ms_chars.iterrows():
+                    key = (row['Character'], row['Role'])
+                    if key not in seen:
+                        seen.add(key)
+                        ms_char_list.append({
+                            'character': row['Character'],
+                            'role': row['Role'],
+                            'preferred': bool(row['Preferred Role']),
+                            'setRank': int(row['Artifact Set Rank'])
+                        })
+                ms_char_list.sort(key=lambda x: (x['setRank'], x['character']))
+
+                # Substats for this main stat
+                substat_data = ms_df.groupby(['Substat', 'Substat Rank']).agg({
+                    'Character': lambda x: list(set(x))
+                }).reset_index()
+                substats_list = []
+                for _, row in substat_data.iterrows():
+                    substats_list.append({
+                        'substat': row['Substat'],
+                        'rank': int(row['Substat Rank']),
+                        'characters': row['Character']
+                    })
+                substats_list.sort(key=lambda x: (x['rank'], x['substat']))
+
+                main_stat_data[main_stat] = {
+                    'characters': ms_char_list,
+                    'substats': substats_list
+                }
+
+            slot_breakdown[slot] = main_stat_data
+
+        by_set[artifact_set] = {
+            'characters': characters_list,
+            'slots': slot_breakdown
+        }
+
+    # Build byArtifact index: "set|slot|mainStat" → characters + substats
+    by_artifact = {}
+    for artifact_set in sets:
+        set_df = df[df['Artifact Set'] == artifact_set]
+        for slot in slots:
+            slot_df = set_df[set_df['Artifact Slot'] == slot]
+            for main_stat in slot_df['Main Stat'].unique():
+                key = f"{artifact_set}|{slot}|{main_stat}"
+                ms_df = slot_df[slot_df['Main Stat'] == main_stat]
+
+                # Characters
+                char_data = ms_df.groupby(['Character', 'Role', 'Preferred Role', 'Artifact Set Rank']).size().reset_index()
+                char_list = []
+                seen = set()
+                for _, row in char_data.iterrows():
+                    k = (row['Character'], row['Role'])
+                    if k not in seen:
+                        seen.add(k)
+                        char_list.append({
+                            'character': row['Character'],
+                            'role': row['Role'],
+                            'preferred': bool(row['Preferred Role']),
+                            'setRank': int(row['Artifact Set Rank'])
+                        })
+                char_list.sort(key=lambda x: (x['setRank'], x['character']))
+
+                # Substats with character attribution
+                sub_data = ms_df.groupby(['Substat', 'Substat Rank']).agg({
+                    'Character': lambda x: sorted(list(set(x)))
+                }).reset_index()
+                sub_list = []
+                for _, row in sub_data.iterrows():
+                    sub_list.append({
+                        'substat': row['Substat'],
+                        'rank': int(row['Substat Rank']),
+                        'characters': row['Character']
+                    })
+                sub_list.sort(key=lambda x: (x['rank'], x['substat']))
+
+                by_artifact[key] = {
+                    'characters': char_list,
+                    'substats': sub_list
+                }
+
+    return {
+        'meta': meta,
+        'bySet': by_set,
+        'byArtifact': by_artifact
+    }
+
+
+# Generate and write JSON for web evaluator
+web_json = generate_web_json(df_enhanced_v2)
+with open('output/artifact_data.json', 'w', encoding='utf-8') as f:
+    json.dump(web_json, f, separators=(',', ':'))
+
+# Generate HTML from template
+with open('artifact_evaluator_template.html', 'r', encoding='utf-8') as f:
+    html_template = f.read()
+json_str = json.dumps(web_json, separators=(',', ':'))
+html_output = html_template.replace('ARTIFACT_DATA_PLACEHOLDER', json_str)
+with open('output/artifact_evaluator.html', 'w', encoding='utf-8') as f:
+    f.write(html_output)
 
 
 # Helper functions for summary analysis
