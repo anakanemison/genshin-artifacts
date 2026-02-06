@@ -67,15 +67,6 @@ function substatTagTpl({ cssClass, slotName, mainStat, substat, rank }) {
   `;
 }
 
-// --- Evaluate: substats table ---
-function charChipTpl({ character, role }, chipClass = "char-chip") {
-  return `<span class="${chipClass}" title="${esc(role)}" data-character="${esc(character)}" data-role="${esc(role)}">${esc(character)}</span>`;
-}
-
-function moreChipTpl(extraCount) {
-  return `<span class="char-chip" style="cursor: default;">+${esc(extraCount)} more</span>`;
-}
-
 function substatRowTpl({ substat, rank }, chipsHtml, rowClass = "") {
   return `
     <tr class="${rowClass}">
