@@ -1,7 +1,12 @@
-// Data will be embedded here
+/**
+ * Genshin Artifact Evaluator
+ * Main application logic
+ */
+
+// Global data variable (loaded from artifact_data.json)
 let DATA = null;
 
-// State
+// Application state
 const state = {
     tab: 'browse',
     set: '',
@@ -9,14 +14,14 @@ const state = {
     mainStat: '',
     preferredOnly: false,
     substatThreshold: 3,
-    // Focus state for substat highlighting in Browse tab
-    focusedSubstat: null,  // { slot, mainStat, substat } or null
-    // Focus state for character highlighting in Evaluate tab
-    focusedCharRole: null  // { character, role } or null
+    focusedSubstat: null,    // { slot, mainStat, substat, rank } or null
+    focusedCharRole: null     // { character, role } or null
 };
 
-// DOM elements
+// DOM element references
 const elements = {
+    loading: document.getElementById('loading'),
+    fatalError: document.getElementById('fatal-error'),
     tabs: document.querySelectorAll('.tab'),
     setFilter: document.getElementById('set-filter'),
     slotFilter: document.getElementById('slot-filter'),
@@ -41,43 +46,57 @@ const elements = {
     evaluateFilters: document.querySelectorAll('.workflow-evaluate-only')
 };
 
-// Data loading
+// ============================================================================
+// Data Loading
+// ============================================================================
+
+/**
+ * Loads artifact data from JSON file
+ */
 async function loadData() {
-    const url = 'artifact_data.json';
-    const res = await fetch(url, { cache: 'no-cache' });
-    if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status} ${res.statusText}`);
-    return await res.json();
-}
-
-function setLoading(isLoading) {
-    const loadingEl = document.getElementById('loading');
-    const fatalEl = document.getElementById('fatal-error');
-    if (loadingEl) loadingEl.style.display = isLoading ? 'flex' : 'none';
-    if (fatalEl) fatalEl.style.display = 'none';
-}
-
-function showFatalError(err) {
-    setLoading(false);
-    const fatalEl = document.getElementById('fatal-error');
-    const fatalText = document.getElementById('fatal-error-text');
-    if (fatalText) fatalText.textContent = `Failed to load artifact data: ${err?.message || err}`;
-    if (fatalEl) fatalEl.style.display = 'flex';
-}
-
-// Initialize
-async function init() {
-    setLoading(true);
     try {
-        DATA = await loadData();
+        showLoading(true);
+        const response = await fetch('artifact_data.json');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        DATA = await response.json();
+        showLoading(false);
+    } catch (error) {
+        console.error('Failed to load artifact data:', error);
+        showFatalError(error.message);
+        throw error;
+    }
+}
+
+function showLoading(isLoading) {
+    elements.loading.style.display = isLoading ? 'flex' : 'none';
+    elements.workflowBrowse.style.display = isLoading ? 'none' : 'block';
+    elements.workflowEvaluate.style.display = 'none';
+}
+
+function showFatalError(message) {
+    elements.fatalError.style.display = 'flex';
+    elements.loading.style.display = 'none';
+    elements.workflowBrowse.style.display = 'none';
+    elements.workflowEvaluate.style.display = 'none';
+}
+
+// ============================================================================
+// Initialization
+// ============================================================================
+
+/**
+ * Initializes the application
+ */
+async function init() {
+    try {
+        await loadData();
         populateSetDropdown();
         populateSlotDropdown();
         bindEvents();
-        updateTabs();
-        setLoading(false);
-        render();
-    } catch (err) {
-        console.error(err);
-        showFatalError(err);
+    } catch (error) {
+        // Error already handled in loadData
     }
 }
 
@@ -112,25 +131,31 @@ function populateMainStatDropdown() {
     });
 }
 
+// ============================================================================
+// Event Handlers
+// ============================================================================
+
 function bindEvents() {
-    // Tabs
+    bindTabEvents();
+    bindFilterEvents();
+    bindFocusEvents();
+}
+
+function bindTabEvents() {
     elements.tabs.forEach(tab => {
         tab.addEventListener('click', () => {
             state.tab = tab.dataset.tab;
-            // Clear focus states when switching tabs
-            state.focusedSubstat = null;
-            state.focusedCharRole = null;
+            clearFocusStates();
             updateTabs();
             render();
         });
     });
+}
 
-    // Filters
+function bindFilterEvents() {
     elements.setFilter.addEventListener('change', (e) => {
         state.set = e.target.value;
-        // Clear focus states when changing set
-        state.focusedSubstat = null;
-        state.focusedCharRole = null;
+        clearFocusStates();
         render();
     });
 
@@ -163,7 +188,9 @@ function bindEvents() {
             render();
         });
     });
+}
 
+function bindFocusEvents() {
     // Clear focus when clicking outside substat tags in Browse view
     elements.slotBreakdown.addEventListener('click', (e) => {
         if (!e.target.closest('.substat-tag') && state.focusedSubstat) {
@@ -173,13 +200,22 @@ function bindEvents() {
     });
 
     // Clear focus when clicking outside character chips in Evaluate view
-    document.getElementById('evaluate-content').addEventListener('click', (e) => {
+    elements.evaluateContent.addEventListener('click', (e) => {
         if (!e.target.closest('.char-chip') && state.focusedCharRole) {
             state.focusedCharRole = null;
             render();
         }
     });
 }
+
+function clearFocusStates() {
+    state.focusedSubstat = null;
+    state.focusedCharRole = null;
+}
+
+// ============================================================================
+// UI Updates
+// ============================================================================
 
 function updateTabs() {
     elements.tabs.forEach(tab => {
@@ -202,6 +238,10 @@ function render() {
     }
 }
 
+// ============================================================================
+// Filtering Utilities
+// ============================================================================
+
 function filterCharacters(chars) {
     if (!state.preferredOnly) return chars;
     return chars.filter(c => c.preferred);
@@ -210,6 +250,10 @@ function filterCharacters(chars) {
 function filterSubstats(substats) {
     return substats.filter(s => s.rank <= state.substatThreshold);
 }
+
+// ============================================================================
+// Browse Tab Rendering
+// ============================================================================
 
 function renderBrowse() {
     if (!state.set) {
@@ -225,132 +269,160 @@ function renderBrowse() {
     if (!setData) return;
 
     const chars = filterCharacters(setData.characters);
+    const focusedCharRoleKeys = computeFocusedCharRoleKeys(setData);
 
-    // Compute highlighted character+role keys if there's a focused substat
-    let focusedCharRoleKeys = new Set();
-    if (state.focusedSubstat) {
-        const { slot, mainStat, substat, rank } = state.focusedSubstat;
-        const slotData = setData.slots[slot];
-        if (slotData && slotData[mainStat]) {
-            const sub = slotData[mainStat].substats.find(s =>
-                s.substat === substat && s.rank === rank
-            );
-            if (sub && sub.characterRoles) {
-                sub.characterRoles.forEach(cr => {
-                    focusedCharRoleKeys.add(`${cr.character}|${cr.role}`);
-                });
-            }
-        }
-    }
-
+    // Update header
     elements.browseTitle.textContent = state.set;
     elements.browseCount.textContent = `${chars.length} character${chars.length !== 1 ? 's' : ''}`;
 
-    // Render characters table with highlighting
+    // Render characters table
+    renderCharactersTable(chars, focusedCharRoleKeys);
+
+    // Render slot breakdown
+    renderSlotBreakdown(setData.slots, focusedCharRoleKeys);
+}
+
+/**
+ * Computes the set of character+role keys that match the focused substat
+ */
+function computeFocusedCharRoleKeys(setData) {
+    const keys = new Set();
+    if (!state.focusedSubstat) return keys;
+
+    const { slot, mainStat, substat, rank } = state.focusedSubstat;
+    const slotData = setData.slots[slot];
+    if (!slotData || !slotData[mainStat]) return keys;
+
+    const sub = slotData[mainStat].substats.find(s =>
+        s.substat === substat && s.rank === rank
+    );
+
+    if (sub && sub.characterRoles) {
+        sub.characterRoles.forEach(cr => {
+            keys.add(`${cr.character}|${cr.role}`);
+        });
+    }
+
+    return keys;
+}
+
+function renderCharactersTable(chars, focusedCharRoleKeys) {
     elements.browseCharsTable.innerHTML = chars.map(c => {
         let rowClass = '';
         if (state.focusedSubstat) {
             const key = `${c.character}|${c.role}`;
             rowClass = focusedCharRoleKeys.has(key) ? 'highlighted' : 'dimmed';
         }
-        return characterRowTpl(c, rowClass);
+        return characterRow(c, rowClass);
     }).join('');
-
-    // Render slot breakdown (pass focusedCharRoleKeys to avoid recomputing)
-    renderSlotBreakdown(setData.slots, focusedCharRoleKeys);
 }
 
 function renderSlotBreakdown(slots, focusedCharRoleKeys) {
-  const slotOrder = ["Sands", "Goblet", "Circlet"];
+    const slotOrder = ['Sands', 'Goblet', 'Circlet'];
 
-  // 1) Build HTML first
-  const html = slotOrder
-    .map((slotName) => {
-      const slotData = slots[slotName];
-      if (!slotData) return "";
+    elements.slotBreakdown.innerHTML = slotOrder.map(slotName => {
+        const slotData = slots[slotName];
+        if (!slotData) return '';
 
-      // Calculate maxCount for bar scaling
-      let maxCount = 0;
-      Object.values(slotData).forEach((data) => {
+        const maxCount = calculateMaxCount(slotData);
+        const mainStatsHtml = renderMainStats(slotName, slotData, maxCount, focusedCharRoleKeys);
+
+        return slotCard(slotName, mainStatsHtml);
+    }).join('');
+
+    bindSlotBreakdownEvents();
+}
+
+function calculateMaxCount(slotData) {
+    let maxCount = 0;
+    Object.entries(slotData).forEach(([_, data]) => {
         const filtered = filterCharacters(data.characters);
-        if (filtered.length > maxCount) maxCount = filtered.length;
-      });
+        if (filtered.length > maxCount) {
+            maxCount = filtered.length;
+        }
+    });
+    return maxCount;
+}
 
-      const mainStats = Object.entries(slotData)
+function renderMainStats(slotName, slotData, maxCount, focusedCharRoleKeys) {
+    const mainStats = Object.entries(slotData)
         .map(([mainStat, data]) => {
-          const chars = filterCharacters(data.characters);
-          const subs = filterSubstats(data.substats);
-          return { mainStat, chars, subs, count: chars.length };
+            const chars = filterCharacters(data.characters);
+            const subs = filterSubstats(data.substats);
+            return { mainStat, chars, subs, count: chars.length };
         })
-        .filter((ms) => ms.count > 0)
+        .filter(ms => ms.count > 0)
         .sort((a, b) => b.count - a.count);
 
-      const mainStatsHtml = mainStats
-        .map((ms) => {
-          const subTagsHtml = ms.subs
-            .map((s) => {
-              let cssClass = "substat-tag";
-
-              if (state.focusedSubstat) {
-                const isFocused =
-                  state.focusedSubstat.slot === slotName &&
-                  state.focusedSubstat.mainStat === ms.mainStat &&
-                  state.focusedSubstat.substat === s.substat &&
-                  state.focusedSubstat.rank === s.rank;
-
-                if (isFocused) {
-                  cssClass += " focused";
-                } else {
-                  const subCharRoles = s.characterRoles || [];
-                  const sharesCharRole = subCharRoles.some((cr) =>
-                    focusedCharRoleKeys.has(`${cr.character}|${cr.role}`)
-                  );
-                  cssClass += sharesCharRole ? " highlighted" : " dimmed";
-                }
-              }
-
-              return substatTagTpl({
-                cssClass,
-                slotName,
-                mainStat: ms.mainStat,
-                substat: s.substat,
-                rank: s.rank,
-              });
-            })
-            .join("");
-
-          return mainStatItemTpl({
+    return mainStats.map(ms => {
+        const subsHtml = renderSubstatTags(slotName, ms.mainStat, ms.subs, focusedCharRoleKeys);
+        return mainStatItem({
             slotName,
             mainStat: ms.mainStat,
             count: ms.count,
             maxCount,
-            substatTagsHtml: subTagsHtml,
-          });
-        })
-        .join("");
+            subsHtml
+        });
+    }).join('');
+}
 
-      return slotCardTpl(slotName, mainStatsHtml);
-    })
-    .join("");
+function renderSubstatTags(slotName, mainStat, subs, focusedCharRoleKeys) {
+    return subs.map(s => {
+        const cssClass = determineSubstatCssClass(slotName, mainStat, s, focusedCharRoleKeys);
+        return substatTag({
+            slotName,
+            mainStat,
+            substat: s.substat,
+            rank: s.rank,
+            cssClass
+        });
+    }).join('');
+}
 
-  // 2) Set DOM once
-  elements.slotBreakdown.innerHTML = html;
+function determineSubstatCssClass(slotName, mainStat, substat, focusedCharRoleKeys) {
+    let cssClass = 'substat-tag';
 
-  // 3) Bind events once (scoped to slotBreakdown)
-  elements.slotBreakdown.querySelectorAll(".main-stat-link").forEach((el) => {
-    el.addEventListener("click", (e) => {
-      const { slot, mainstat } = e.currentTarget.dataset; // use currentTarget, not target
-      navigateToEvaluate(slot, mainstat);
+    if (!state.focusedSubstat) return cssClass;
+
+    const isFocused = state.focusedSubstat.slot === slotName &&
+                      state.focusedSubstat.mainStat === mainStat &&
+                      state.focusedSubstat.substat === substat.substat &&
+                      state.focusedSubstat.rank === substat.rank;
+
+    if (isFocused) {
+        return cssClass + ' focused';
+    }
+
+    // Check if this substat shares any character+role with focused
+    const subCharRoles = substat.characterRoles || [];
+    const sharesCharRole = subCharRoles.some(cr =>
+        focusedCharRoleKeys.has(`${cr.character}|${cr.role}`)
+    );
+
+    return cssClass + (sharesCharRole ? ' highlighted' : ' dimmed');
+}
+
+function bindSlotBreakdownEvents() {
+    // Bind click handlers for main stat links
+    document.querySelectorAll('.main-stat-link').forEach(el => {
+        el.addEventListener('click', (e) => {
+            const slot = e.target.dataset.slot;
+            const mainStat = e.target.dataset.mainstat;
+            navigateToEvaluate(slot, mainStat);
+        });
     });
-  });
 
-  elements.slotBreakdown.querySelectorAll(".substat-tag").forEach((el) => {
-    el.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const { slot, mainstat, substat, rank } = e.currentTarget.dataset;
-      toggleSubstatFocus(slot, mainstat, substat, Number(rank));
+    // Bind click handlers for substat tags
+    document.querySelectorAll('#slot-breakdown .substat-tag').forEach(el => {
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const slot = el.dataset.slot;
+            const mainStat = el.dataset.mainstat;
+            const substat = el.dataset.substat;
+            const rank = parseInt(el.dataset.rank);
+            toggleSubstatFocus(slot, mainStat, substat, rank);
+        });
     });
-  });
 }
 
 function navigateToEvaluate(slot, mainStat) {
@@ -381,6 +453,10 @@ function toggleSubstatFocus(slot, mainStat, substat, rank) {
     render();
 }
 
+// ============================================================================
+// Evaluate Tab Rendering
+// ============================================================================
+
 function renderEvaluate() {
     if (!state.set || !state.slot || !state.mainStat) {
         elements.evaluateEmpty.style.display = 'flex';
@@ -395,65 +471,88 @@ function renderEvaluate() {
     const artifactData = DATA.byArtifact[key];
 
     if (!artifactData) {
-        elements.verdictCount.textContent = '0';
-        elements.verdictText.textContent = 'characters';
-        elements.evaluateCharsTable.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">No characters want this combination</td></tr>';
-        elements.substatsTable.innerHTML = '';
+        renderEmptyEvaluate();
         return;
     }
 
     const chars = filterCharacters(artifactData.characters);
     const subs = filterSubstats(artifactData.substats);
 
-    // Verdict
+    renderEvaluateVerdict(chars);
+    renderEvaluateCharacters(chars);
+    renderEvaluateSubstats(subs, chars);
+}
+
+function renderEmptyEvaluate() {
+    elements.verdictCount.textContent = '0';
+    elements.verdictText.textContent = 'characters';
+    elements.evaluateCharsTable.innerHTML = emptyRow('No characters want this combination');
+    elements.substatsTable.innerHTML = '';
+}
+
+function renderEvaluateVerdict(chars) {
     elements.verdictCount.textContent = chars.length;
     elements.verdictText.textContent = chars.length === 1 ? 'character' : 'characters';
+}
 
-    // Characters table with highlighting when a character chip is focused
-    elements.evaluateCharsTable.innerHTML = chars.length > 0 ? chars.map(c => {
+function renderEvaluateCharacters(chars) {
+    if (chars.length === 0) {
+        elements.evaluateCharsTable.innerHTML = emptyRow('No characters match filters');
+        return;
+    }
+
+    elements.evaluateCharsTable.innerHTML = chars.map(c => {
         let rowClass = '';
         if (state.focusedCharRole) {
             const isMatch = c.character === state.focusedCharRole.character &&
-                            c.role === state.focusedCharRole.role;
+                           c.role === state.focusedCharRole.role;
             rowClass = isMatch ? 'highlighted' : 'dimmed';
         }
-        return characterRowTpl(c, rowClass);
-    }).join('') : emptyRowTpl("No characters match filters", 3);
+        return characterRow(c, rowClass);
+    }).join('');
+}
 
-    // Substats table with character chips that have tooltips and click handlers
-    elements.substatsTable.innerHTML = subs.length > 0 ? subs.map(s => {
-        // Get character+role pairs for this substat
+function renderEvaluateSubstats(subs, chars) {
+    if (subs.length === 0) {
+        elements.substatsTable.innerHTML = emptyRow('No substats match threshold');
+        return;
+    }
+
+    const rows = subs.map(s => {
         const charRoles = s.characterRoles || [];
-        // Filter by preferred if needed
         let filteredCharRoles = charRoles;
+
+        // Filter by preferred if needed
         if (state.preferredOnly) {
             filteredCharRoles = charRoles.filter(cr =>
                 chars.some(c => c.character === cr.character)
             );
         }
+
         if (filteredCharRoles.length === 0) return '';
 
-        // Determine row CSS class based on focus state
-        // Check if the focused character+role wants this specific substat+rank
-        let rowClass = '';
-        if (state.focusedCharRole) {
-            const wantsThisSubstat = (s.characterRoles || []).some(cr =>
-                cr.character === state.focusedCharRole.character &&
-                cr.role === state.focusedCharRole.role
-            );
-            rowClass = wantsThisSubstat ? 'highlighted-row' : 'dimmed-row';
-        }
+        // Determine row CSS class
+        const rowClass = determineSubstatRowClass(s);
 
-        return substatRowTpl(
-            { substat: s.substat, rank: s.rank },
-            chipsHtml,
-            rowClass
-          );
-        })
-        .filter(Boolean)
-        .join("")
-    : emptyRowTpl("No substats match threshold", 3);
+        return substatRow(s, filteredCharRoles, state.focusedCharRole, rowClass);
+    }).filter(Boolean);
 
+    elements.substatsTable.innerHTML = rows.join('');
+    bindEvaluateSubstatsEvents();
+}
+
+function determineSubstatRowClass(substat) {
+    if (!state.focusedCharRole) return '';
+
+    const wantsThisSubstat = (substat.characterRoles || []).some(cr =>
+        cr.character === state.focusedCharRole.character &&
+        cr.role === state.focusedCharRole.role
+    );
+
+    return wantsThisSubstat ? 'highlighted-row' : 'dimmed-row';
+}
+
+function bindEvaluateSubstatsEvents() {
     // Bind click handlers for character chips
     document.querySelectorAll('#substats-table .char-chip[data-character]').forEach(el => {
         el.addEventListener('click', (e) => {
@@ -477,5 +576,8 @@ function toggleCharRoleFocus(character, role) {
     render();
 }
 
-// Start
+// ============================================================================
+// Start Application
+// ============================================================================
+
 init();

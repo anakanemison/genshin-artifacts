@@ -401,20 +401,6 @@ tr.dimmed {
     background: rgba(255,255,255,0.1);
     border-radius: 4px;
     font-size: 0.75rem;
-}
-
-.substat-rank {
-    width: 14px;
-    height: 14px;
-    border-radius: 3px;
-    font-size: 0.65rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 600;
-}
-
-.substat-tag {
     cursor: pointer;
     transition: all 0.2s;
     border: 2px solid transparent;
@@ -436,6 +422,17 @@ tr.dimmed {
 
 .substat-tag.dimmed {
     opacity: 0.35;
+}
+
+.substat-rank {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    font-size: 0.65rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
 }
 
 /* Character chips in substat table */

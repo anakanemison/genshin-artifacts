@@ -10,3 +10,6 @@ __pycache__/
 
 # Script output
 output/
+
+# Claude
+.claude/
