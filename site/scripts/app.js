@@ -14,45 +14,17 @@ const state = {
     mainStat: '',
     preferredOnly: false,
     substatThreshold: 3,
-    focusedSubstat: null,    // { slot, mainStat, substat, rank } or null
-    focusedCharRole: null     // { character, role } or null
+    focusedSubstat: null,
+    focusedCharRole: null
 };
 
-// DOM element references
-const elements = {
-    loading: document.getElementById('loading'),
-    fatalError: document.getElementById('fatal-error'),
-    tabs: document.querySelectorAll('.tab'),
-    setFilter: document.getElementById('set-filter'),
-    slotFilter: document.getElementById('slot-filter'),
-    mainstatFilter: document.getElementById('mainstat-filter'),
-    preferredToggle: document.getElementById('preferred-toggle'),
-    toggleText: document.querySelector('.toggle-text'),
-    thresholdBtns: document.querySelectorAll('.threshold-btn'),
-    workflowBrowse: document.getElementById('workflow-browse'),
-    workflowEvaluate: document.getElementById('workflow-evaluate'),
-    browseEmpty: document.getElementById('browse-empty'),
-    browseContent: document.getElementById('browse-content'),
-    browseTitle: document.getElementById('browse-title'),
-    browseCount: document.getElementById('browse-count'),
-    browseCharsTable: document.getElementById('browse-chars-table').querySelector('tbody'),
-    slotBreakdown: document.getElementById('slot-breakdown'),
-    evaluateEmpty: document.getElementById('evaluate-empty'),
-    evaluateContent: document.getElementById('evaluate-content'),
-    verdictCount: document.getElementById('verdict-count'),
-    verdictText: document.getElementById('verdict-text'),
-    evaluateCharsTable: document.getElementById('evaluate-chars-table').querySelector('tbody'),
-    substatsTable: document.getElementById('substats-table').querySelector('tbody'),
-    evaluateFilters: document.querySelectorAll('.workflow-evaluate-only')
-};
+// DOM element references - will be initialized in init()
+let elements = null;
 
 // ============================================================================
 // Data Loading
 // ============================================================================
 
-/**
- * Loads artifact data from JSON file
- */
 async function loadData() {
     try {
         showLoading(true);
@@ -71,8 +43,7 @@ async function loadData() {
 
 function showLoading(isLoading) {
     elements.loading.style.display = isLoading ? 'flex' : 'none';
-    elements.workflowBrowse.style.display = isLoading ? 'none' : 'block';
-    elements.workflowEvaluate.style.display = 'none';
+    // Let CSS classes control workflow visibility via updateTabs()
 }
 
 function showFatalError(message) {
@@ -86,17 +57,46 @@ function showFatalError(message) {
 // Initialization
 // ============================================================================
 
-/**
- * Initializes the application
- */
+function initElements() {
+    elements = {
+        loading: document.getElementById('loading'),
+        fatalError: document.getElementById('fatal-error'),
+        tabs: document.querySelectorAll('.tab'),
+        setFilter: document.getElementById('set-filter'),
+        slotFilter: document.getElementById('slot-filter'),
+        mainstatFilter: document.getElementById('mainstat-filter'),
+        preferredToggle: document.getElementById('preferred-toggle'),
+        toggleText: document.querySelector('.toggle-text'),
+        thresholdBtns: document.querySelectorAll('.threshold-btn'),
+        workflowBrowse: document.getElementById('workflow-browse'),
+        workflowEvaluate: document.getElementById('workflow-evaluate'),
+        browseEmpty: document.getElementById('browse-empty'),
+        browseContent: document.getElementById('browse-content'),
+        browseTitle: document.getElementById('browse-title'),
+        browseCount: document.getElementById('browse-count'),
+        browseCharsTable: document.getElementById('browse-chars-table').querySelector('tbody'),
+        slotBreakdown: document.getElementById('slot-breakdown'),
+        evaluateEmpty: document.getElementById('evaluate-empty'),
+        evaluateContent: document.getElementById('evaluate-content'),
+        verdictCount: document.getElementById('verdict-count'),
+        verdictText: document.getElementById('verdict-text'),
+        evaluateCharsTable: document.getElementById('evaluate-chars-table').querySelector('tbody'),
+        substatsTable: document.getElementById('substats-table').querySelector('tbody'),
+        evaluateFilters: document.querySelectorAll('.workflow-evaluate-only')
+    };
+}
+
 async function init() {
     try {
+        initElements();
         await loadData();
         populateSetDropdown();
         populateSlotDropdown();
+        updateTabs();
         bindEvents();
+        render();
     } catch (error) {
-        // Error already handled in loadData
+        console.error('Initialization error:', error);
     }
 }
 
