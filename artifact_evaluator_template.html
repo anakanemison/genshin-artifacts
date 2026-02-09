@@ -291,6 +291,17 @@
             background: rgba(255,255,255,0.02);
         }
 
+        tr.char-row {
+            cursor: pointer;
+        }
+
+        tr.focused {
+            outline: 2px solid var(--accent);
+            outline-offset: -2px;
+            background: rgba(233, 69, 96, 0.2);
+            cursor: pointer;
+        }
+
         tr.highlighted {
             background: rgba(74, 222, 128, 0.15);
         }
@@ -827,17 +838,20 @@
                 });
             });
 
-            // Clear focus when clicking outside substat tags in Browse view
-            elements.slotBreakdown.addEventListener('click', (e) => {
-                if (!e.target.closest('.substat-tag') && state.focusedSubstat) {
+            // Clear focus when clicking non-interactive areas in Browse view
+            document.getElementById('browse-content').addEventListener('click', (e) => {
+                if (!e.target.closest('.substat-tag') && !e.target.closest('tr.char-row') &&
+                    (state.focusedSubstat || state.focusedCharRole)) {
                     state.focusedSubstat = null;
+                    state.focusedCharRole = null;
                     render();
                 }
             });
 
-            // Clear focus when clicking outside character chips in Evaluate view
+            // Clear focus when clicking non-interactive areas in Evaluate view
             document.getElementById('evaluate-content').addEventListener('click', (e) => {
-                if (!e.target.closest('.char-chip') && state.focusedCharRole) {
+                if (!e.target.closest('.char-chip') && !e.target.closest('tr.char-row') &&
+                    state.focusedCharRole) {
                     state.focusedCharRole = null;
                     render();
                 }
@@ -889,7 +903,7 @@
 
             const chars = filterCharacters(setData.characters);
 
-            // Compute highlighted character+role keys if there's a focused substat
+            // Compute highlighted character+role keys from either focused substat or focused char row
             let focusedCharRoleKeys = new Set();
             if (state.focusedSubstat) {
                 const { slot, mainStat, substat, rank } = state.focusedSubstat;
@@ -904,26 +918,46 @@
                         });
                     }
                 }
+            } else if (state.focusedCharRole) {
+                focusedCharRoleKeys.add(`${state.focusedCharRole.character}|${state.focusedCharRole.role}`);
             }
+
+            const hasFocus = state.focusedSubstat || state.focusedCharRole;
 
             elements.browseTitle.textContent = state.set;
             elements.browseCount.textContent = `${chars.length} character${chars.length !== 1 ? 's' : ''}`;
 
-            // Render characters table with highlighting
+            // Render characters table with highlighting and click handlers
             elements.browseCharsTable.innerHTML = chars.map(c => {
-                let rowClass = '';
-                if (state.focusedSubstat) {
-                    const key = `${c.character}|${c.role}`;
-                    rowClass = focusedCharRoleKeys.has(key) ? 'highlighted' : 'dimmed';
+                const key = `${c.character}|${c.role}`;
+                let rowClass = 'char-row';
+                if (hasFocus) {
+                    const isFocusedRow = state.focusedCharRole &&
+                                         c.character === state.focusedCharRole.character &&
+                                         c.role === state.focusedCharRole.role;
+                    if (isFocusedRow) {
+                        rowClass += ' focused';
+                    } else if (focusedCharRoleKeys.has(key)) {
+                        rowClass += ' highlighted';
+                    } else {
+                        rowClass += ' dimmed';
+                    }
                 }
                 return `
-                    <tr class="${rowClass}">
+                    <tr class="${rowClass}" data-character="${c.character}" data-role="${c.role}">
                         <td>${c.character}${c.preferred ? '<span class="preferred" title="Preferred role">★</span>' : ''}</td>
                         <td>${c.role}</td>
                         <td><span class="rank rank-${Math.min(c.setRank, 5)}">${c.setRank}</span></td>
                     </tr>
                 `;
             }).join('');
+
+            // Bind click handlers for character rows in Browse tab
+            elements.browseCharsTable.querySelectorAll('tr.char-row').forEach(el => {
+                el.addEventListener('click', () => {
+                    toggleCharRoleFocus(el.dataset.character, el.dataset.role);
+                });
+            });
 
             // Render slot breakdown (pass focusedCharRoleKeys to avoid recomputing)
             renderSlotBreakdown(setData.slots, focusedCharRoleKeys);
@@ -969,12 +1003,14 @@
                                         ${ms.subs.map(s => {
                                             // Determine CSS class for this substat tag
                                             let cssClass = 'substat-tag';
-                                            if (state.focusedSubstat) {
-                                                const isFocused = state.focusedSubstat.slot === slotName &&
+                                            const hasFocus = state.focusedSubstat || state.focusedCharRole;
+                                            if (hasFocus) {
+                                                const isFocusedTile = state.focusedSubstat &&
+                                                                  state.focusedSubstat.slot === slotName &&
                                                                   state.focusedSubstat.mainStat === ms.mainStat &&
                                                                   state.focusedSubstat.substat === s.substat &&
                                                                   state.focusedSubstat.rank === s.rank;
-                                                if (isFocused) {
+                                                if (isFocusedTile) {
                                                     cssClass += ' focused';
                                                 } else {
                                                     // Check if this substat shares any character+role with focused
@@ -1047,6 +1083,8 @@
             } else {
                 state.focusedSubstat = { slot, mainStat, substat, rank };
             }
+            // Exclusive with character focus
+            state.focusedCharRole = null;
             render();
         }
 
@@ -1078,22 +1116,29 @@
             elements.verdictCount.textContent = chars.length;
             elements.verdictText.textContent = chars.length === 1 ? 'character' : 'characters';
 
-            // Characters table with highlighting when a character chip is focused
+            // Characters table with highlighting when a character+role is focused
             elements.evaluateCharsTable.innerHTML = chars.length > 0 ? chars.map(c => {
-                let rowClass = '';
+                let rowClass = 'char-row';
                 if (state.focusedCharRole) {
                     const isMatch = c.character === state.focusedCharRole.character &&
                                     c.role === state.focusedCharRole.role;
-                    rowClass = isMatch ? 'highlighted' : 'dimmed';
+                    rowClass += isMatch ? ' focused' : ' dimmed';
                 }
                 return `
-                    <tr class="${rowClass}">
+                    <tr class="${rowClass}" data-character="${c.character}" data-role="${c.role}">
                         <td>${c.character}${c.preferred ? '<span class="preferred" title="Preferred role">★</span>' : ''}</td>
                         <td>${c.role}</td>
                         <td><span class="rank rank-${Math.min(c.setRank, 5)}">${c.setRank}</span></td>
                     </tr>
                 `;
             }).join('') : '<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">No characters match filters</td></tr>';
+
+            // Bind click handlers for character rows in Evaluate tab
+            elements.evaluateCharsTable.querySelectorAll('tr.char-row').forEach(el => {
+                el.addEventListener('click', () => {
+                    toggleCharRoleFocus(el.dataset.character, el.dataset.role);
+                });
+            });
 
             // Substats table with character chips that have tooltips and click handlers
             elements.substatsTable.innerHTML = subs.length > 0 ? subs.map(s => {
@@ -1163,6 +1208,8 @@
             } else {
                 state.focusedCharRole = { character, role };
             }
+            // Exclusive with substat focus
+            state.focusedSubstat = null;
             render();
         }
 
