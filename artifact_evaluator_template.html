@@ -560,6 +560,78 @@
             border-color: var(--accent);
             color: white;
         }
+
+        .input-row {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .text-input {
+            flex: 1;
+            padding: 0.55rem 0.7rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 0.85rem;
+        }
+
+        .text-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .mini-btn {
+            padding: 0.5rem 0.7rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+
+        .mini-btn:hover {
+            background: var(--bg-primary);
+        }
+
+        .chip-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+            margin-top: 0.6rem;
+        }
+
+        .persona-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.25rem 0.4rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            font-size: 0.72rem;
+            color: var(--text-secondary);
+        }
+
+        .persona-chip.priority {
+            border-color: var(--warning);
+            color: var(--text-primary);
+        }
+
+        .chip-remove {
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 0.8rem;
+            line-height: 1;
+            padding: 0;
+        }
+
+        .chip-remove:hover {
+            color: var(--text-primary);
+        }
     </style>
 </head>
 <body>
@@ -601,8 +673,34 @@
                     <label class="filter-label">Preferred Roles Only</label>
                     <div class="toggle-wrapper">
                         <div class="toggle" id="preferred-toggle"></div>
-                        <span class="toggle-text">Show all roles</span>
+                        <span class="toggle-text" id="preferred-toggle-text">Show all roles</span>
                     </div>
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label">Owned Roster Mode</label>
+                    <div class="toggle-wrapper">
+                        <div class="toggle" id="owned-toggle"></div>
+                        <span class="toggle-text" id="owned-toggle-text">Show all characters</span>
+                    </div>
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label">Owned Characters</label>
+                    <div class="input-row">
+                        <input id="owned-input" class="text-input" list="character-options" placeholder="Add character..." />
+                        <button id="owned-add-btn" class="mini-btn" type="button">Add</button>
+                    </div>
+                    <div class="chip-list" id="owned-chips"></div>
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label">Priority Characters</label>
+                    <div class="input-row">
+                        <input id="priority-input" class="text-input" list="character-options" placeholder="Boost in results..." />
+                        <button id="priority-add-btn" class="mini-btn" type="button">Add</button>
+                    </div>
+                    <div class="chip-list" id="priority-chips"></div>
                 </div>
 
                 <div class="filter-group">
@@ -616,6 +714,7 @@
                     </div>
                 </div>
             </aside>
+            <datalist id="character-options"></datalist>
 
             <main class="results">
                 <!-- Browse Workflow -->
@@ -715,7 +814,10 @@
             slot: '',
             mainStat: '',
             preferredOnly: false,
+            ownedOnly: false,
             substatThreshold: 3,
+            ownedCharacters: [],
+            priorityCharacters: [],
             // Focus state for substat highlighting in Browse tab
             focusedSubstat: null,  // { slot, mainStat, substat } or null
             // Focus state for character highlighting in Evaluate tab
@@ -729,7 +831,16 @@
             slotFilter: document.getElementById('slot-filter'),
             mainstatFilter: document.getElementById('mainstat-filter'),
             preferredToggle: document.getElementById('preferred-toggle'),
-            toggleText: document.querySelector('.toggle-text'),
+            preferredToggleText: document.getElementById('preferred-toggle-text'),
+            ownedToggle: document.getElementById('owned-toggle'),
+            ownedToggleText: document.getElementById('owned-toggle-text'),
+            ownedInput: document.getElementById('owned-input'),
+            ownedAddBtn: document.getElementById('owned-add-btn'),
+            ownedChips: document.getElementById('owned-chips'),
+            priorityInput: document.getElementById('priority-input'),
+            priorityAddBtn: document.getElementById('priority-add-btn'),
+            priorityChips: document.getElementById('priority-chips'),
+            characterOptions: document.getElementById('character-options'),
             thresholdBtns: document.querySelectorAll('.threshold-btn'),
             workflowBrowse: document.getElementById('workflow-browse'),
             workflowEvaluate: document.getElementById('workflow-evaluate'),
@@ -752,8 +863,13 @@
         function init() {
             populateSetDropdown();
             populateSlotDropdown();
+            populateCharacterDatalist();
+            loadPersonalizationFromStorage();
             restoreStateFromUrl();
+            sanitizePersonalizationState();
+            savePersonalizationToStorage();
             syncControlsToState();
+            renderPersonalizationChips();
             populateMainStatDropdown();
             if (state.mainStat) {
                 elements.mainstatFilter.value = state.mainStat;
@@ -790,10 +906,24 @@
 
             const preferredOnly = params.get('preferredOnly');
             state.preferredOnly = preferredOnly === '1';
+            const ownedOnly = params.get('ownedOnly');
+            if (ownedOnly !== null) {
+                state.ownedOnly = ownedOnly === '1';
+            }
 
             const substatThreshold = parseInt(params.get('substatThreshold') || '', 10);
             if (Number.isInteger(substatThreshold) && substatThreshold > 0) {
                 state.substatThreshold = substatThreshold;
+            }
+
+            const ownedChars = params.getAll('owned');
+            if (ownedChars.length > 0) {
+                state.ownedCharacters = ownedChars;
+            }
+
+            const priorityChars = params.getAll('priority');
+            if (priorityChars.length > 0) {
+                state.priorityCharacters = priorityChars;
             }
 
             const focusSubSlot = params.get('focusSubSlot');
@@ -820,7 +950,9 @@
             elements.setFilter.value = state.set;
             elements.slotFilter.value = state.slot;
             elements.preferredToggle.classList.toggle('active', state.preferredOnly);
-            elements.toggleText.textContent = state.preferredOnly ? 'Preferred only' : 'Show all roles';
+            elements.preferredToggleText.textContent = state.preferredOnly ? 'Preferred only' : 'Show all roles';
+            elements.ownedToggle.classList.toggle('active', state.ownedOnly);
+            elements.ownedToggleText.textContent = state.ownedOnly ? 'Owned roster only' : 'Show all characters';
             elements.thresholdBtns.forEach(btn => {
                 btn.classList.toggle('active', parseInt(btn.dataset.threshold, 10) === state.substatThreshold);
             });
@@ -843,9 +975,14 @@
             if (state.preferredOnly) {
                 params.set('preferredOnly', '1');
             }
+            if (state.ownedOnly) {
+                params.set('ownedOnly', '1');
+            }
             if (state.substatThreshold !== 3) {
                 params.set('substatThreshold', String(state.substatThreshold));
             }
+            state.ownedCharacters.forEach(character => params.append('owned', character));
+            state.priorityCharacters.forEach(character => params.append('priority', character));
             if (state.focusedSubstat) {
                 params.set('focusSubSlot', state.focusedSubstat.slot);
                 params.set('focusSubMain', state.focusedSubstat.mainStat);
@@ -881,6 +1018,105 @@
                 option.textContent = slot;
                 elements.slotFilter.appendChild(option);
             });
+        }
+
+        function populateCharacterDatalist() {
+            DATA.meta.characters.forEach(character => {
+                const option = document.createElement('option');
+                option.value = character;
+                elements.characterOptions.appendChild(option);
+            });
+        }
+
+        function sanitizePersonalizationState() {
+            const validCharacters = new Set(DATA.meta.characters);
+            state.ownedCharacters = [...new Set(state.ownedCharacters.filter(c => validCharacters.has(c)))].sort();
+            state.priorityCharacters = [...new Set(state.priorityCharacters.filter(c => validCharacters.has(c)))].sort();
+        }
+
+        function loadPersonalizationFromStorage() {
+            try {
+                const raw = window.localStorage.getItem('genshin-artifacts-personalization-v1');
+                if (!raw) return;
+                const parsed = JSON.parse(raw);
+                if (parsed && typeof parsed === 'object') {
+                    state.ownedOnly = parsed.ownedOnly === true;
+                    state.ownedCharacters = Array.isArray(parsed.ownedCharacters) ? parsed.ownedCharacters : [];
+                    state.priorityCharacters = Array.isArray(parsed.priorityCharacters) ? parsed.priorityCharacters : [];
+                }
+            } catch (_) {
+                // Ignore malformed stored personalization.
+            }
+        }
+
+        function savePersonalizationToStorage() {
+            const payload = {
+                ownedOnly: state.ownedOnly,
+                ownedCharacters: state.ownedCharacters,
+                priorityCharacters: state.priorityCharacters
+            };
+            window.localStorage.setItem('genshin-artifacts-personalization-v1', JSON.stringify(payload));
+        }
+
+        function renderPersonalizationChips() {
+            elements.ownedChips.innerHTML = state.ownedCharacters.map(character => `
+                <span class="persona-chip">
+                    ${character}
+                    <button class="chip-remove" data-remove-owned="${character}" title="Remove">×</button>
+                </span>
+            `).join('');
+            elements.priorityChips.innerHTML = state.priorityCharacters.map(character => `
+                <span class="persona-chip priority">
+                    ${character}
+                    <button class="chip-remove" data-remove-priority="${character}" title="Remove">×</button>
+                </span>
+            `).join('');
+
+            elements.ownedChips.querySelectorAll('[data-remove-owned]').forEach(el => {
+                el.addEventListener('click', (e) => {
+                    const character = e.currentTarget.dataset.removeOwned;
+                    state.ownedCharacters = state.ownedCharacters.filter(c => c !== character);
+                    if (state.priorityCharacters.includes(character)) {
+                        state.priorityCharacters = state.priorityCharacters.filter(c => c !== character);
+                    }
+                    state.focusedCharRole = null;
+                    savePersonalizationToStorage();
+                    renderPersonalizationChips();
+                    render();
+                });
+            });
+
+            elements.priorityChips.querySelectorAll('[data-remove-priority]').forEach(el => {
+                el.addEventListener('click', (e) => {
+                    const character = e.currentTarget.dataset.removePriority;
+                    state.priorityCharacters = state.priorityCharacters.filter(c => c !== character);
+                    savePersonalizationToStorage();
+                    renderPersonalizationChips();
+                    render();
+                });
+            });
+        }
+
+        function addOwnedCharacter(character) {
+            if (!character || !DATA.meta.characters.includes(character)) return;
+            if (!state.ownedCharacters.includes(character)) {
+                state.ownedCharacters.push(character);
+                state.ownedCharacters.sort();
+                savePersonalizationToStorage();
+            }
+            renderPersonalizationChips();
+            render();
+        }
+
+        function addPriorityCharacter(character) {
+            if (!character || !DATA.meta.characters.includes(character)) return;
+            if (!state.priorityCharacters.includes(character)) {
+                state.priorityCharacters.push(character);
+                state.priorityCharacters.sort();
+                savePersonalizationToStorage();
+            }
+            renderPersonalizationChips();
+            render();
         }
 
         function populateMainStatDropdown() {
@@ -935,8 +1171,43 @@
             elements.preferredToggle.addEventListener('click', () => {
                 state.preferredOnly = !state.preferredOnly;
                 elements.preferredToggle.classList.toggle('active', state.preferredOnly);
-                elements.toggleText.textContent = state.preferredOnly ? 'Preferred only' : 'Show all roles';
+                elements.preferredToggleText.textContent = state.preferredOnly ? 'Preferred only' : 'Show all roles';
                 render();
+            });
+
+            elements.ownedToggle.addEventListener('click', () => {
+                state.ownedOnly = !state.ownedOnly;
+                elements.ownedToggle.classList.toggle('active', state.ownedOnly);
+                elements.ownedToggleText.textContent = state.ownedOnly ? 'Owned roster only' : 'Show all characters';
+                state.focusedCharRole = null;
+                savePersonalizationToStorage();
+                render();
+            });
+
+            elements.ownedAddBtn.addEventListener('click', () => {
+                addOwnedCharacter(elements.ownedInput.value.trim());
+                elements.ownedInput.value = '';
+            });
+
+            elements.priorityAddBtn.addEventListener('click', () => {
+                addPriorityCharacter(elements.priorityInput.value.trim());
+                elements.priorityInput.value = '';
+            });
+
+            elements.ownedInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addOwnedCharacter(elements.ownedInput.value.trim());
+                    elements.ownedInput.value = '';
+                }
+            });
+
+            elements.priorityInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addPriorityCharacter(elements.priorityInput.value.trim());
+                    elements.priorityInput.value = '';
+                }
             });
 
             elements.thresholdBtns.forEach(btn => {
@@ -990,13 +1261,42 @@
             syncUrlToState();
         }
 
+        function isPriorityCharacter(character) {
+            return state.priorityCharacters.includes(character);
+        }
+
+        function sortCharacters(chars) {
+            return [...chars].sort((a, b) => {
+                const priorityDiff = Number(isPriorityCharacter(b.character)) - Number(isPriorityCharacter(a.character));
+                if (priorityDiff !== 0) return priorityDiff;
+                if (a.setRank !== b.setRank) return a.setRank - b.setRank;
+                const nameDiff = a.character.localeCompare(b.character);
+                if (nameDiff !== 0) return nameDiff;
+                return a.role.localeCompare(b.role);
+            });
+        }
+
         function filterCharacters(chars) {
-            if (!state.preferredOnly) return chars;
-            return chars.filter(c => c.preferred);
+            let filtered = chars;
+            if (state.preferredOnly) {
+                filtered = filtered.filter(c => c.preferred);
+            }
+            if (state.ownedOnly) {
+                const owned = new Set(state.ownedCharacters);
+                filtered = filtered.filter(c => owned.has(c.character));
+            }
+            return sortCharacters(filtered);
         }
 
         function filterSubstats(substats) {
             return substats.filter(s => s.rank <= state.substatThreshold);
+        }
+
+        function filterSubstatsByCharacters(substats, characters) {
+            const visible = new Set(characters.map(c => `${c.character}|${c.role}`));
+            return substats.filter(s =>
+                (s.characterRoles || []).some(cr => visible.has(`${cr.character}|${cr.role}`))
+            );
         }
 
         function renderBrowse() {
@@ -1091,7 +1391,7 @@
                 const mainStats = Object.entries(slotData)
                     .map(([mainStat, data]) => {
                         const chars = filterCharacters(data.characters);
-                        const subs = filterSubstats(data.substats);
+                        const subs = filterSubstatsByCharacters(filterSubstats(data.substats), chars);
                         return { mainStat, chars, subs, count: chars.length };
                     })
                     .filter(ms => ms.count > 0)
@@ -1255,13 +1555,11 @@
             elements.substatsTable.innerHTML = subs.length > 0 ? subs.map(s => {
                 // Get character+role pairs for this substat
                 const charRoles = s.characterRoles || [];
-                // Filter by preferred if needed
-                let filteredCharRoles = charRoles;
-                if (state.preferredOnly) {
-                    filteredCharRoles = charRoles.filter(cr =>
-                        chars.some(c => c.character === cr.character)
-                    );
-                }
+                // Filter chips to currently visible character+role rows.
+                const visibleCharRoles = new Set(chars.map(c => `${c.character}|${c.role}`));
+                const filteredCharRoles = charRoles.filter(cr =>
+                    visibleCharRoles.has(`${cr.character}|${cr.role}`)
+                );
                 if (filteredCharRoles.length === 0) return '';
 
                 // Determine row CSS class based on focus state
