@@ -478,10 +478,57 @@ def generate_web_json(df):
                     'substats': sub_list
                 }
 
+    # Build byMainStat index: "slot|mainStat" (ignores set) → characters + substats
+    by_main_stat = {}
+    for slot in slots:
+        slot_df = df[df['Artifact Slot'] == slot]
+        for main_stat in slot_df['Main Stat'].unique():
+            key = f"{slot}|{main_stat}"
+            ms_df = slot_df[slot_df['Main Stat'] == main_stat]
+
+            # Characters with best (lowest) set rank for this slot/main stat across all sets.
+            char_data = ms_df.groupby(
+                ['Character', 'Role', 'Preferred Role']
+            )['Artifact Set Rank'].min().reset_index(name='Best Set Rank')
+            char_list = []
+            for _, row in char_data.iterrows():
+                char_list.append({
+                    'character': row['Character'],
+                    'role': row['Role'],
+                    'preferred': bool(row['Preferred Role']),
+                    'setRank': int(row['Best Set Rank'])
+                })
+            char_list.sort(key=lambda x: (x['setRank'], x['character']))
+
+            # Substats with best rank per character+role+substat, then grouped for UI display.
+            best_sub_per_char = ms_df.groupby(
+                ['Character', 'Role', 'Substat']
+            )['Substat Rank'].min().reset_index(name='Best Substat Rank')
+            sub_data = best_sub_per_char.groupby(['Substat', 'Best Substat Rank']).apply(
+                lambda g: g[['Character', 'Role']].drop_duplicates().to_dict('records')
+            ).reset_index(name='char_roles')
+            sub_list = []
+            for _, row in sub_data.iterrows():
+                char_roles = [{'character': cr['Character'], 'role': cr['Role']}
+                              for cr in row['char_roles']]
+                char_roles.sort(key=lambda x: (x['character'], x['role']))
+                sub_list.append({
+                    'substat': row['Substat'],
+                    'rank': int(row['Best Substat Rank']),
+                    'characterRoles': char_roles
+                })
+            sub_list.sort(key=lambda x: (x['rank'], x['substat']))
+
+            by_main_stat[key] = {
+                'characters': char_list,
+                'substats': sub_list
+            }
+
     return {
         'meta': meta,
         'bySet': by_set,
-        'byArtifact': by_artifact
+        'byArtifact': by_artifact,
+        'byMainStat': by_main_stat
     }
 
 

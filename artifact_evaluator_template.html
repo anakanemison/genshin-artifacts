@@ -644,11 +644,12 @@
         <div class="tabs">
             <button class="tab active" data-tab="browse">Browse by Set</button>
             <button class="tab" data-tab="evaluate">Evaluate Artifact</button>
+            <button class="tab" data-tab="offset">Evaluate Off-Set</button>
         </div>
 
         <div class="main-layout">
             <aside class="sidebar">
-                <div class="filter-group">
+                <div class="filter-group workflow-set-required">
                     <label class="filter-label">Artifact Set</label>
                     <select id="set-filter">
                         <option value="">Select a set...</option>
@@ -799,6 +800,54 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Off-Set Workflow -->
+                <div class="workflow" id="workflow-offset">
+                    <div class="empty-state" id="offset-empty">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
+                        </svg>
+                        <p>Select Slot and Main Stat to evaluate an off-set artifact</p>
+                    </div>
+                    <div id="offset-content" style="display: none;">
+                        <div class="verdict" id="offset-verdict">
+                            <span class="verdict-count" id="offset-verdict-count">0</span>
+                            <span class="verdict-text">
+                                <strong id="offset-verdict-text">characters</strong> want this off-set artifact
+                            </span>
+                        </div>
+
+                        <h3 class="section-title">Characters</h3>
+                        <div class="table-container">
+                            <table id="offset-chars-table">
+                                <thead>
+                                    <tr>
+                                        <th>Character</th>
+                                        <th>Role</th>
+                                        <th>Best Set Rank</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+
+                        <hr class="section-divider">
+
+                        <h3 class="section-title">Substats to Look For</h3>
+                        <div class="table-container">
+                            <table id="offset-substats-table">
+                                <thead>
+                                    <tr>
+                                        <th>Substat</th>
+                                        <th>Rank</th>
+                                        <th>Characters</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             </main>
         </div>
     </div>
@@ -844,6 +893,7 @@
             thresholdBtns: document.querySelectorAll('.threshold-btn'),
             workflowBrowse: document.getElementById('workflow-browse'),
             workflowEvaluate: document.getElementById('workflow-evaluate'),
+            workflowOffset: document.getElementById('workflow-offset'),
             browseEmpty: document.getElementById('browse-empty'),
             browseContent: document.getElementById('browse-content'),
             browseTitle: document.getElementById('browse-title'),
@@ -856,7 +906,14 @@
             verdictText: document.getElementById('verdict-text'),
             evaluateCharsTable: document.getElementById('evaluate-chars-table').querySelector('tbody'),
             substatsTable: document.getElementById('substats-table').querySelector('tbody'),
-            evaluateFilters: document.querySelectorAll('.workflow-evaluate-only')
+            evaluateFilters: document.querySelectorAll('.workflow-evaluate-only'),
+            setRequiredFilters: document.querySelectorAll('.workflow-set-required'),
+            offsetEmpty: document.getElementById('offset-empty'),
+            offsetContent: document.getElementById('offset-content'),
+            offsetVerdictCount: document.getElementById('offset-verdict-count'),
+            offsetVerdictText: document.getElementById('offset-verdict-text'),
+            offsetCharsTable: document.getElementById('offset-chars-table').querySelector('tbody'),
+            offsetSubstatsTable: document.getElementById('offset-substats-table').querySelector('tbody')
         };
 
         // Initialize
@@ -882,7 +939,7 @@
         function restoreStateFromUrl() {
             const params = new URLSearchParams(window.location.search);
             const tab = params.get('tab');
-            if (tab === 'browse' || tab === 'evaluate') {
+            if (tab === 'browse' || tab === 'evaluate' || tab === 'offset') {
                 state.tab = tab;
             }
 
@@ -1237,6 +1294,15 @@
                     render();
                 }
             });
+
+            // Clear focus when clicking non-interactive areas in Off-Set view
+            document.getElementById('offset-content').addEventListener('click', (e) => {
+                if (!e.target.closest('.char-chip') && !e.target.closest('tr.char-row') &&
+                    state.focusedCharRole) {
+                    state.focusedCharRole = null;
+                    render();
+                }
+            });
         }
 
         function updateTabs() {
@@ -1245,18 +1311,26 @@
             });
             elements.workflowBrowse.classList.toggle('active', state.tab === 'browse');
             elements.workflowEvaluate.classList.toggle('active', state.tab === 'evaluate');
+            elements.workflowOffset.classList.toggle('active', state.tab === 'offset');
 
             // Show/hide evaluate-specific filters
             elements.evaluateFilters.forEach(el => {
-                el.style.display = state.tab === 'evaluate' ? 'block' : 'none';
+                el.style.display = (state.tab === 'evaluate' || state.tab === 'offset') ? 'block' : 'none';
+            });
+
+            // Hide set filter for off-set mode.
+            elements.setRequiredFilters.forEach(el => {
+                el.style.display = state.tab === 'offset' ? 'none' : 'block';
             });
         }
 
         function render() {
             if (state.tab === 'browse') {
                 renderBrowse();
-            } else {
+            } else if (state.tab === 'evaluate') {
                 renderEvaluate();
+            } else {
+                renderOffsetEvaluate();
             }
             syncUrlToState();
         }
@@ -1665,6 +1739,106 @@
 
             // Bind click handlers for character chips
             document.querySelectorAll('#substats-table .char-chip[data-character]').forEach(el => {
+                el.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const character = el.dataset.character;
+                    const role = el.dataset.role;
+                    toggleCharRoleFocus(character, role);
+                });
+            });
+        }
+
+        function renderOffsetEvaluate() {
+            if (!state.slot || !state.mainStat) {
+                elements.offsetEmpty.style.display = 'flex';
+                elements.offsetContent.style.display = 'none';
+                return;
+            }
+
+            elements.offsetEmpty.style.display = 'none';
+            elements.offsetContent.style.display = 'block';
+
+            const key = `${state.slot}|${state.mainStat}`;
+            const artifactData = DATA.byMainStat ? DATA.byMainStat[key] : null;
+
+            if (!artifactData) {
+                elements.offsetVerdictCount.textContent = '0';
+                elements.offsetVerdictText.textContent = 'characters';
+                elements.offsetCharsTable.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">No characters want this main stat off-set</td></tr>';
+                elements.offsetSubstatsTable.innerHTML = '';
+                return;
+            }
+
+            const chars = filterCharacters(artifactData.characters);
+            const subs = filterSubstats(artifactData.substats);
+
+            elements.offsetVerdictCount.textContent = chars.length;
+            elements.offsetVerdictText.textContent = chars.length === 1 ? 'character' : 'characters';
+
+            elements.offsetCharsTable.innerHTML = chars.length > 0 ? chars.map(c => {
+                let rowClass = 'char-row';
+                if (state.focusedCharRole) {
+                    const isMatch = c.character === state.focusedCharRole.character &&
+                                    c.role === state.focusedCharRole.role;
+                    rowClass += isMatch ? ' focused' : ' dimmed';
+                }
+                return `
+                    <tr class="${rowClass}" data-character="${c.character}" data-role="${c.role}">
+                        <td>${c.character}${c.preferred ? '<span class="preferred" title="Preferred role">★</span>' : ''}</td>
+                        <td>${c.role}</td>
+                        <td><span class="rank rank-${Math.min(c.setRank, 5)}">${c.setRank}</span></td>
+                    </tr>
+                `;
+            }).join('') : '<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">No characters match filters</td></tr>';
+
+            elements.offsetCharsTable.querySelectorAll('tr.char-row').forEach(el => {
+                el.addEventListener('click', () => {
+                    toggleCharRoleFocus(el.dataset.character, el.dataset.role);
+                });
+            });
+
+            elements.offsetSubstatsTable.innerHTML = subs.length > 0 ? subs.map(s => {
+                const charRoles = s.characterRoles || [];
+                const visibleCharRoles = new Set(chars.map(c => `${c.character}|${c.role}`));
+                const filteredCharRoles = charRoles.filter(cr =>
+                    visibleCharRoles.has(`${cr.character}|${cr.role}`)
+                );
+                if (filteredCharRoles.length === 0) return '';
+
+                let rowClass = '';
+                if (state.focusedCharRole) {
+                    const wantsThisSubstat = (s.characterRoles || []).some(cr =>
+                        cr.character === state.focusedCharRole.character &&
+                        cr.role === state.focusedCharRole.role
+                    );
+                    rowClass = wantsThisSubstat ? 'highlighted-row' : 'dimmed-row';
+                }
+
+                return `
+                    <tr class="${rowClass}">
+                        <td>${s.substat}</td>
+                        <td><span class="rank rank-${Math.min(s.rank, 5)}">${s.rank}</span></td>
+                        <td>
+                            <div class="char-chips">
+                                ${filteredCharRoles.slice(0, 10).map(cr => {
+                                    let chipClass = 'char-chip';
+                                    if (state.focusedCharRole) {
+                                        const isFocused = cr.character === state.focusedCharRole.character &&
+                                                          cr.role === state.focusedCharRole.role;
+                                        if (isFocused) {
+                                            chipClass += ' focused';
+                                        }
+                                    }
+                                    return `<span class="${chipClass}" title="${cr.role}" data-character="${cr.character}" data-role="${cr.role}">${cr.character}</span>`;
+                                }).join('')}
+                                ${filteredCharRoles.length > 10 ? `<span class="char-chip" style="cursor: default;">+${filteredCharRoles.length - 10} more</span>` : ''}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).filter(Boolean).join('') : '<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">No substats match threshold</td></tr>';
+
+            document.querySelectorAll('#offset-substats-table .char-chip[data-character]').forEach(el => {
                 el.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const character = el.dataset.character;
