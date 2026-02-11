@@ -386,9 +386,49 @@ def generate_web_json(df):
 
             slot_breakdown[slot] = main_stat_data
 
+        # Build combined fixed-main-stat slot for Flower/Feather.
+        # Source data does not encode these slots explicitly; aggregate by set.
+        fixed_char_data = set_df.groupby(
+            ['Character', 'Role', 'Preferred Role', 'Artifact Set Rank']
+        ).size().reset_index()
+        fixed_char_list = []
+        fixed_seen = set()
+        for _, row in fixed_char_data.iterrows():
+            key = (row['Character'], row['Role'])
+            if key not in fixed_seen:
+                fixed_seen.add(key)
+                fixed_char_list.append({
+                    'character': row['Character'],
+                    'role': row['Role'],
+                    'preferred': bool(row['Preferred Role']),
+                    'setRank': int(row['Artifact Set Rank'])
+                })
+        fixed_char_list.sort(key=lambda x: (x['setRank'], x['character']))
+
+        fixed_sub_data = set_df.groupby(['Substat', 'Substat Rank']).apply(
+            lambda g: g[['Character', 'Role']].drop_duplicates().to_dict('records')
+        ).reset_index(name='char_roles')
+        fixed_sub_list = []
+        for _, row in fixed_sub_data.iterrows():
+            char_roles = [{'character': cr['Character'], 'role': cr['Role']}
+                          for cr in row['char_roles']]
+            char_roles.sort(key=lambda x: (x['character'], x['role']))
+            fixed_sub_list.append({
+                'substat': row['Substat'],
+                'rank': int(row['Substat Rank']),
+                'characterRoles': char_roles
+            })
+        fixed_sub_list.sort(key=lambda x: (x['rank'], x['substat']))
+
         by_set[artifact_set] = {
             'characters': characters_list,
-            'slots': slot_breakdown
+            'slots': slot_breakdown,
+            'fixedSlots': {
+                'slot': 'Flower/Feather',
+                'mainStatLabel': 'Fixed Main Stats (HP / ATK)',
+                'characters': fixed_char_list,
+                'substats': fixed_sub_list
+            }
         }
 
     # Build byArtifact index: "set|slot|mainStat" → characters + substats

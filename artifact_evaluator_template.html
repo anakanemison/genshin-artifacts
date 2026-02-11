@@ -930,7 +930,7 @@
             const focusSubMain = params.get('focusSubMain');
             const focusSubStat = params.get('focusSubStat');
             const focusSubRank = parseInt(params.get('focusSubRank') || '', 10);
-            if (focusSubSlot && focusSubMain && focusSubStat && Number.isInteger(focusSubRank)) {
+            if (focusSubSlot && focusSubMain !== null && focusSubStat && Number.isInteger(focusSubRank)) {
                 state.focusedSubstat = {
                     slot: focusSubSlot,
                     mainStat: focusSubMain,
@@ -1318,15 +1318,26 @@
             let focusedCharRoleKeys = new Set();
             if (state.focusedSubstat) {
                 const { slot, mainStat, substat, rank } = state.focusedSubstat;
-                const slotData = setData.slots[slot];
-                if (slotData && slotData[mainStat]) {
-                    const sub = slotData[mainStat].substats.find(s =>
+                if (slot === 'Flower/Feather') {
+                    const fixedSub = (setData.fixedSlots?.substats || []).find(s =>
                         s.substat === substat && s.rank === rank
                     );
-                    if (sub && sub.characterRoles) {
-                        sub.characterRoles.forEach(cr => {
+                    if (fixedSub && fixedSub.characterRoles) {
+                        fixedSub.characterRoles.forEach(cr => {
                             focusedCharRoleKeys.add(`${cr.character}|${cr.role}`);
                         });
+                    }
+                } else {
+                    const slotData = setData.slots[slot];
+                    if (slotData && slotData[mainStat]) {
+                        const sub = slotData[mainStat].substats.find(s =>
+                            s.substat === substat && s.rank === rank
+                        );
+                        if (sub && sub.characterRoles) {
+                            sub.characterRoles.forEach(cr => {
+                                focusedCharRoleKeys.add(`${cr.character}|${cr.role}`);
+                            });
+                        }
                     }
                 }
             } else if (state.focusedCharRole) {
@@ -1371,13 +1382,13 @@
             });
 
             // Render slot breakdown (pass focusedCharRoleKeys to avoid recomputing)
-            renderSlotBreakdown(setData.slots, focusedCharRoleKeys);
+            renderSlotBreakdown(setData.slots, setData.fixedSlots, focusedCharRoleKeys);
         }
 
-        function renderSlotBreakdown(slots, focusedCharRoleKeys) {
+        function renderSlotBreakdown(slots, fixedSlots, focusedCharRoleKeys) {
             const slotOrder = ['Sands', 'Goblet', 'Circlet'];
 
-            elements.slotBreakdown.innerHTML = slotOrder.map(slotName => {
+            const regularSlotCards = slotOrder.map(slotName => {
                 const slotData = slots[slotName];
                 if (!slotData) return '';
 
@@ -1446,6 +1457,61 @@
                     </div>
                 `;
             }).join('');
+
+            let fixedSlotCard = '';
+            if (fixedSlots && fixedSlots.substats) {
+                const fixedChars = filterCharacters(fixedSlots.characters || []);
+                const fixedSubs = filterSubstatsByCharacters(
+                    filterSubstats(fixedSlots.substats || []),
+                    fixedChars
+                );
+                const maxCount = Math.max(fixedChars.length, 1);
+                fixedSlotCard = `
+                    <div class="slot-card">
+                        <div class="slot-header">${fixedSlots.slot || 'Flower/Feather'}</div>
+                        <div class="slot-content">
+                            <div class="main-stat-item">
+                                <div class="main-stat-name">
+                                    <span>${fixedSlots.mainStatLabel || 'Fixed Main Stats (HP / ATK)'}</span>
+                                    <span class="main-stat-count">${fixedChars.length} char${fixedChars.length !== 1 ? 's' : ''}</span>
+                                </div>
+                                <div class="main-stat-bar">
+                                    <div class="main-stat-bar-fill" style="width: ${(fixedChars.length / maxCount * 100)}%"></div>
+                                </div>
+                                <div class="substat-tags">
+                                    ${fixedSubs.map(s => {
+                                        let cssClass = 'substat-tag';
+                                        const hasFocus = state.focusedSubstat || state.focusedCharRole;
+                                        if (hasFocus) {
+                                            const isFocusedTile = state.focusedSubstat &&
+                                                                state.focusedSubstat.slot === (fixedSlots.slot || 'Flower/Feather') &&
+                                                                state.focusedSubstat.substat === s.substat &&
+                                                                state.focusedSubstat.rank === s.rank;
+                                            if (isFocusedTile) {
+                                                cssClass += ' focused';
+                                            } else {
+                                                const subCharRoles = s.characterRoles || [];
+                                                const sharesCharRole = subCharRoles.some(cr =>
+                                                    focusedCharRoleKeys.has(`${cr.character}|${cr.role}`)
+                                                );
+                                                cssClass += sharesCharRole ? ' highlighted' : ' dimmed';
+                                            }
+                                        }
+                                        return `
+                                            <span class="${cssClass}" data-slot="${fixedSlots.slot || 'Flower/Feather'}" data-mainstat="" data-substat="${s.substat}" data-rank="${s.rank}">
+                                                <span class="substat-rank rank-${Math.min(s.rank, 5)}">${s.rank}</span>
+                                                ${s.substat}
+                                            </span>
+                                        `;
+                                    }).join('')}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            elements.slotBreakdown.innerHTML = `${fixedSlotCard}${regularSlotCards}`;
 
             // Bind click handlers for main stat links
             document.querySelectorAll('.main-stat-link').forEach(el => {
