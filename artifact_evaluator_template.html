@@ -752,7 +752,117 @@
         function init() {
             populateSetDropdown();
             populateSlotDropdown();
+            restoreStateFromUrl();
+            syncControlsToState();
+            populateMainStatDropdown();
+            if (state.mainStat) {
+                elements.mainstatFilter.value = state.mainStat;
+            }
+            updateTabs();
             bindEvents();
+            render();
+        }
+
+        function restoreStateFromUrl() {
+            const params = new URLSearchParams(window.location.search);
+            const tab = params.get('tab');
+            if (tab === 'browse' || tab === 'evaluate') {
+                state.tab = tab;
+            }
+
+            const set = params.get('set');
+            if (set && DATA.meta.sets.includes(set)) {
+                state.set = set;
+            }
+
+            const slot = params.get('slot');
+            if (slot && DATA.meta.slots.includes(slot)) {
+                state.slot = slot;
+            }
+
+            const mainStat = params.get('mainStat');
+            if (mainStat && state.slot) {
+                const mainStats = DATA.meta.mainStatsBySlot[state.slot] || [];
+                if (mainStats.includes(mainStat)) {
+                    state.mainStat = mainStat;
+                }
+            }
+
+            const preferredOnly = params.get('preferredOnly');
+            state.preferredOnly = preferredOnly === '1';
+
+            const substatThreshold = parseInt(params.get('substatThreshold') || '', 10);
+            if (Number.isInteger(substatThreshold) && substatThreshold > 0) {
+                state.substatThreshold = substatThreshold;
+            }
+
+            const focusSubSlot = params.get('focusSubSlot');
+            const focusSubMain = params.get('focusSubMain');
+            const focusSubStat = params.get('focusSubStat');
+            const focusSubRank = parseInt(params.get('focusSubRank') || '', 10);
+            if (focusSubSlot && focusSubMain && focusSubStat && Number.isInteger(focusSubRank)) {
+                state.focusedSubstat = {
+                    slot: focusSubSlot,
+                    mainStat: focusSubMain,
+                    substat: focusSubStat,
+                    rank: focusSubRank
+                };
+            }
+
+            const focusChar = params.get('focusChar');
+            const focusRole = params.get('focusRole');
+            if (focusChar && focusRole) {
+                state.focusedCharRole = { character: focusChar, role: focusRole };
+            }
+        }
+
+        function syncControlsToState() {
+            elements.setFilter.value = state.set;
+            elements.slotFilter.value = state.slot;
+            elements.preferredToggle.classList.toggle('active', state.preferredOnly);
+            elements.toggleText.textContent = state.preferredOnly ? 'Preferred only' : 'Show all roles';
+            elements.thresholdBtns.forEach(btn => {
+                btn.classList.toggle('active', parseInt(btn.dataset.threshold, 10) === state.substatThreshold);
+            });
+        }
+
+        function syncUrlToState() {
+            const params = new URLSearchParams();
+            if (state.tab !== 'browse') {
+                params.set('tab', state.tab);
+            }
+            if (state.set) {
+                params.set('set', state.set);
+            }
+            if (state.slot) {
+                params.set('slot', state.slot);
+            }
+            if (state.mainStat) {
+                params.set('mainStat', state.mainStat);
+            }
+            if (state.preferredOnly) {
+                params.set('preferredOnly', '1');
+            }
+            if (state.substatThreshold !== 3) {
+                params.set('substatThreshold', String(state.substatThreshold));
+            }
+            if (state.focusedSubstat) {
+                params.set('focusSubSlot', state.focusedSubstat.slot);
+                params.set('focusSubMain', state.focusedSubstat.mainStat);
+                params.set('focusSubStat', state.focusedSubstat.substat);
+                params.set('focusSubRank', String(state.focusedSubstat.rank));
+            }
+            if (state.focusedCharRole) {
+                params.set('focusChar', state.focusedCharRole.character);
+                params.set('focusRole', state.focusedCharRole.role);
+            }
+
+            const newSearch = params.toString();
+            const currentSearch = window.location.search.replace(/^\?/, '');
+            if (newSearch !== currentSearch) {
+                const newUrl = `${window.location.pathname}${newSearch ? `?${newSearch}` : ''}`;
+                window.history.replaceState(null, '', newUrl);
+            }
         }
 
         function populateSetDropdown() {
@@ -877,6 +987,7 @@
             } else {
                 renderEvaluate();
             }
+            syncUrlToState();
         }
 
         function filterCharacters(chars) {
