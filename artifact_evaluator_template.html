@@ -561,13 +561,61 @@
             color: white;
         }
 
-        .input-row {
+        .mini-btn {
+            padding: 0.5rem 0.7rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+
+        .mini-btn:hover {
+            background: var(--bg-primary);
+        }
+
+        .roster-summary {
             display: flex;
             gap: 0.5rem;
+            margin-top: 0.6rem;
+        }
+
+        .summary-pill {
+            padding: 0.3rem 0.55rem;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            background: var(--bg-tertiary);
+        }
+
+        .summary-pill strong {
+            color: var(--text-primary);
+        }
+
+        .manage-help {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            margin-top: 0.45rem;
+        }
+
+        .roster-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.6rem;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .toolbar-spacer {
+            flex: 1;
         }
 
         .text-input {
-            flex: 1;
+            width: 100%;
+            max-width: 360px;
             padding: 0.55rem 0.7rem;
             background: var(--bg-tertiary);
             border: 1px solid var(--border);
@@ -581,56 +629,46 @@
             border-color: var(--accent);
         }
 
-        .mini-btn {
-            padding: 0.5rem 0.7rem;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            color: var(--text-primary);
-            cursor: pointer;
-            font-size: 0.8rem;
-        }
-
-        .mini-btn:hover {
-            background: var(--bg-primary);
-        }
-
-        .chip-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.35rem;
-            margin-top: 0.6rem;
-        }
-
-        .persona-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.25rem;
-            padding: 0.25rem 0.4rem;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border);
-            border-radius: 999px;
-            font-size: 0.72rem;
+        .manage-count {
+            font-size: 0.85rem;
             color: var(--text-secondary);
         }
 
-        .persona-chip.priority {
-            border-color: var(--warning);
-            color: var(--text-primary);
-        }
-
-        .chip-remove {
-            border: none;
-            background: transparent;
-            color: var(--text-muted);
+        .status-btn {
+            min-width: 92px;
+            text-align: center;
+            padding: 0.35rem 0.55rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-secondary);
             cursor: pointer;
-            font-size: 0.8rem;
-            line-height: 1;
-            padding: 0;
+            font-size: 0.78rem;
+            transition: all 0.2s;
         }
 
-        .chip-remove:hover {
+        .status-btn:hover {
+            background: var(--bg-primary);
             color: var(--text-primary);
+        }
+
+        .status-btn.active {
+            border-color: var(--success);
+            color: var(--text-primary);
+            background: rgba(74, 222, 128, 0.15);
+        }
+
+        .status-btn.priority.active {
+            border-color: var(--warning);
+            background: rgba(251, 191, 36, 0.15);
+        }
+
+        .main-layout.manage-mode {
+            grid-template-columns: 1fr;
+        }
+
+        .main-layout.manage-mode .sidebar {
+            display: none;
         }
     </style>
 </head>
@@ -645,9 +683,10 @@
             <button class="tab active" data-tab="browse">Browse by Set</button>
             <button class="tab" data-tab="evaluate">Evaluate Artifact</button>
             <button class="tab" data-tab="offset">Evaluate Off-Set</button>
+            <button class="tab" data-tab="characters">Manage Characters</button>
         </div>
 
-        <div class="main-layout">
+        <div class="main-layout" id="main-layout">
             <aside class="sidebar">
                 <div class="filter-group workflow-set-required">
                     <label class="filter-label">Artifact Set</label>
@@ -684,24 +723,12 @@
                         <div class="toggle" id="owned-toggle"></div>
                         <span class="toggle-text" id="owned-toggle-text">Show all characters</span>
                     </div>
-                </div>
-
-                <div class="filter-group">
-                    <label class="filter-label">Owned Characters</label>
-                    <div class="input-row">
-                        <input id="owned-input" class="text-input" list="character-options" placeholder="Add character..." />
-                        <button id="owned-add-btn" class="mini-btn" type="button">Add</button>
+                    <div class="roster-summary">
+                        <span class="summary-pill"><strong id="owned-count-sidebar">0</strong> owned</span>
+                        <span class="summary-pill"><strong id="priority-count-sidebar">0</strong> priority</span>
                     </div>
-                    <div class="chip-list" id="owned-chips"></div>
-                </div>
-
-                <div class="filter-group">
-                    <label class="filter-label">Priority Characters</label>
-                    <div class="input-row">
-                        <input id="priority-input" class="text-input" list="character-options" placeholder="Boost in results..." />
-                        <button id="priority-add-btn" class="mini-btn" type="button">Add</button>
-                    </div>
-                    <div class="chip-list" id="priority-chips"></div>
+                    <button id="open-character-manager" class="mini-btn" type="button" style="margin-top: 0.7rem; width: 100%;">Manage Characters</button>
+                    <div class="manage-help">Roster lives in local browser storage.</div>
                 </div>
 
                 <div class="filter-group">
@@ -715,8 +742,6 @@
                     </div>
                 </div>
             </aside>
-            <datalist id="character-options"></datalist>
-
             <main class="results">
                 <!-- Browse Workflow -->
                 <div class="workflow active" id="workflow-browse">
@@ -848,6 +873,41 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Character Management Workflow -->
+                <div class="workflow" id="workflow-characters">
+                    <div class="results-header" style="margin-bottom: 1.25rem;">
+                        <h2 class="results-title">Character Management</h2>
+                        <span class="results-count" id="character-manager-count">0 shown</span>
+                    </div>
+
+                    <div class="roster-toolbar">
+                        <input id="character-search" class="text-input" placeholder="Search characters..." />
+                        <button id="clear-character-search" class="mini-btn" type="button">Clear Search</button>
+                        <span class="toolbar-spacer"></span>
+                        <span class="manage-count"><strong id="owned-count-main">0</strong> owned</span>
+                        <span class="manage-count"><strong id="priority-count-main">0</strong> priority</span>
+                    </div>
+
+                    <div class="roster-toolbar">
+                        <button id="set-visible-owned" class="mini-btn" type="button">Mark Visible Owned</button>
+                        <button id="clear-visible-owned" class="mini-btn" type="button">Unmark Visible Owned</button>
+                        <button id="clear-all-priority" class="mini-btn" type="button">Clear Priority (All Characters)</button>
+                    </div>
+
+                    <div class="table-container">
+                        <table id="characters-table">
+                            <thead>
+                                <tr>
+                                    <th>Character</th>
+                                    <th>Owned</th>
+                                    <th>Priority</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
             </main>
         </div>
     </div>
@@ -867,6 +927,7 @@
             substatThreshold: 3,
             ownedCharacters: [],
             priorityCharacters: [],
+            characterSearch: '',
             // Focus state for substat highlighting in Browse tab
             focusedSubstat: null,  // { slot, mainStat, substat } or null
             // Focus state for character highlighting in Evaluate tab
@@ -883,17 +944,15 @@
             preferredToggleText: document.getElementById('preferred-toggle-text'),
             ownedToggle: document.getElementById('owned-toggle'),
             ownedToggleText: document.getElementById('owned-toggle-text'),
-            ownedInput: document.getElementById('owned-input'),
-            ownedAddBtn: document.getElementById('owned-add-btn'),
-            ownedChips: document.getElementById('owned-chips'),
-            priorityInput: document.getElementById('priority-input'),
-            priorityAddBtn: document.getElementById('priority-add-btn'),
-            priorityChips: document.getElementById('priority-chips'),
-            characterOptions: document.getElementById('character-options'),
+            ownedCountSidebar: document.getElementById('owned-count-sidebar'),
+            priorityCountSidebar: document.getElementById('priority-count-sidebar'),
+            openCharacterManager: document.getElementById('open-character-manager'),
             thresholdBtns: document.querySelectorAll('.threshold-btn'),
+            mainLayout: document.getElementById('main-layout'),
             workflowBrowse: document.getElementById('workflow-browse'),
             workflowEvaluate: document.getElementById('workflow-evaluate'),
             workflowOffset: document.getElementById('workflow-offset'),
+            workflowCharacters: document.getElementById('workflow-characters'),
             browseEmpty: document.getElementById('browse-empty'),
             browseContent: document.getElementById('browse-content'),
             browseTitle: document.getElementById('browse-title'),
@@ -913,20 +972,28 @@
             offsetVerdictCount: document.getElementById('offset-verdict-count'),
             offsetVerdictText: document.getElementById('offset-verdict-text'),
             offsetCharsTable: document.getElementById('offset-chars-table').querySelector('tbody'),
-            offsetSubstatsTable: document.getElementById('offset-substats-table').querySelector('tbody')
+            offsetSubstatsTable: document.getElementById('offset-substats-table').querySelector('tbody'),
+            characterSearch: document.getElementById('character-search'),
+            clearCharacterSearch: document.getElementById('clear-character-search'),
+            characterManagerCount: document.getElementById('character-manager-count'),
+            ownedCountMain: document.getElementById('owned-count-main'),
+            priorityCountMain: document.getElementById('priority-count-main'),
+            charactersTable: document.getElementById('characters-table').querySelector('tbody'),
+            setVisibleOwned: document.getElementById('set-visible-owned'),
+            clearVisibleOwned: document.getElementById('clear-visible-owned'),
+            clearAllPriority: document.getElementById('clear-all-priority')
         };
 
         // Initialize
         function init() {
             populateSetDropdown();
             populateSlotDropdown();
-            populateCharacterDatalist();
             loadPersonalizationFromStorage();
             restoreStateFromUrl();
             sanitizePersonalizationState();
             savePersonalizationToStorage();
             syncControlsToState();
-            renderPersonalizationChips();
+            updateRosterCounts();
             populateMainStatDropdown();
             if (state.mainStat) {
                 elements.mainstatFilter.value = state.mainStat;
@@ -939,7 +1006,7 @@
         function restoreStateFromUrl() {
             const params = new URLSearchParams(window.location.search);
             const tab = params.get('tab');
-            if (tab === 'browse' || tab === 'evaluate' || tab === 'offset') {
+            if (tab === 'browse' || tab === 'evaluate' || tab === 'offset' || tab === 'characters') {
                 state.tab = tab;
             }
 
@@ -971,16 +1038,6 @@
             const substatThreshold = parseInt(params.get('substatThreshold') || '', 10);
             if (Number.isInteger(substatThreshold) && substatThreshold > 0) {
                 state.substatThreshold = substatThreshold;
-            }
-
-            const ownedChars = params.getAll('owned');
-            if (ownedChars.length > 0) {
-                state.ownedCharacters = ownedChars;
-            }
-
-            const priorityChars = params.getAll('priority');
-            if (priorityChars.length > 0) {
-                state.priorityCharacters = priorityChars;
             }
 
             const focusSubSlot = params.get('focusSubSlot');
@@ -1038,8 +1095,6 @@
             if (state.substatThreshold !== 3) {
                 params.set('substatThreshold', String(state.substatThreshold));
             }
-            state.ownedCharacters.forEach(character => params.append('owned', character));
-            state.priorityCharacters.forEach(character => params.append('priority', character));
             if (state.focusedSubstat) {
                 params.set('focusSubSlot', state.focusedSubstat.slot);
                 params.set('focusSubMain', state.focusedSubstat.mainStat);
@@ -1077,14 +1132,6 @@
             });
         }
 
-        function populateCharacterDatalist() {
-            DATA.meta.characters.forEach(character => {
-                const option = document.createElement('option');
-                option.value = character;
-                elements.characterOptions.appendChild(option);
-            });
-        }
-
         function sanitizePersonalizationState() {
             const validCharacters = new Set(DATA.meta.characters);
             state.ownedCharacters = [...new Set(state.ownedCharacters.filter(c => validCharacters.has(c)))].sort();
@@ -1115,65 +1162,109 @@
             window.localStorage.setItem('genshin-artifacts-personalization-v1', JSON.stringify(payload));
         }
 
-        function renderPersonalizationChips() {
-            elements.ownedChips.innerHTML = state.ownedCharacters.map(character => `
-                <span class="persona-chip">
-                    ${character}
-                    <button class="chip-remove" data-remove-owned="${character}" title="Remove">×</button>
-                </span>
-            `).join('');
-            elements.priorityChips.innerHTML = state.priorityCharacters.map(character => `
-                <span class="persona-chip priority">
-                    ${character}
-                    <button class="chip-remove" data-remove-priority="${character}" title="Remove">×</button>
-                </span>
-            `).join('');
-
-            elements.ownedChips.querySelectorAll('[data-remove-owned]').forEach(el => {
-                el.addEventListener('click', (e) => {
-                    const character = e.currentTarget.dataset.removeOwned;
-                    state.ownedCharacters = state.ownedCharacters.filter(c => c !== character);
-                    if (state.priorityCharacters.includes(character)) {
-                        state.priorityCharacters = state.priorityCharacters.filter(c => c !== character);
-                    }
-                    state.focusedCharRole = null;
-                    savePersonalizationToStorage();
-                    renderPersonalizationChips();
-                    render();
-                });
-            });
-
-            elements.priorityChips.querySelectorAll('[data-remove-priority]').forEach(el => {
-                el.addEventListener('click', (e) => {
-                    const character = e.currentTarget.dataset.removePriority;
-                    state.priorityCharacters = state.priorityCharacters.filter(c => c !== character);
-                    savePersonalizationToStorage();
-                    renderPersonalizationChips();
-                    render();
-                });
-            });
+        function updateRosterCounts() {
+            const ownedCount = state.ownedCharacters.length;
+            const priorityCount = state.priorityCharacters.length;
+            elements.ownedCountSidebar.textContent = String(ownedCount);
+            elements.priorityCountSidebar.textContent = String(priorityCount);
+            elements.ownedCountMain.textContent = String(ownedCount);
+            elements.priorityCountMain.textContent = String(priorityCount);
         }
 
-        function addOwnedCharacter(character) {
-            if (!character || !DATA.meta.characters.includes(character)) return;
-            if (!state.ownedCharacters.includes(character)) {
-                state.ownedCharacters.push(character);
-                state.ownedCharacters.sort();
-                savePersonalizationToStorage();
+        function isOwnedCharacter(character) {
+            return state.ownedCharacters.includes(character);
+        }
+
+        function isPriorityCharacter(character) {
+            return state.priorityCharacters.includes(character);
+        }
+
+        function getCharacterManagerList() {
+            const search = state.characterSearch.trim().toUpperCase();
+            const matches = DATA.meta.characters.filter(character =>
+                !search || character.includes(search)
+            );
+            elements.characterManagerCount.textContent = `${matches.length} shown`;
+            return matches;
+        }
+
+        function hasActiveCharacterSearch() {
+            return state.characterSearch.trim().length > 0;
+        }
+
+        function updateCharacterManagerActionLabels() {
+            const searchActive = hasActiveCharacterSearch();
+            elements.setVisibleOwned.textContent = searchActive ? 'Mark Visible Owned' : 'Mark All Owned';
+            elements.clearVisibleOwned.textContent = searchActive ? 'Unmark Visible Owned' : 'Unmark All Owned';
+            elements.clearAllPriority.textContent = 'Clear Priority (All Characters)';
+        }
+
+        function setCharacterOwned(character, owned) {
+            if (!DATA.meta.characters.includes(character)) return;
+            if (owned) {
+                if (!state.ownedCharacters.includes(character)) {
+                    state.ownedCharacters.push(character);
+                }
+            } else {
+                state.ownedCharacters = state.ownedCharacters.filter(c => c !== character);
+                state.priorityCharacters = state.priorityCharacters.filter(c => c !== character);
             }
-            renderPersonalizationChips();
+            state.ownedCharacters.sort();
+            state.priorityCharacters.sort();
+            state.focusedCharRole = null;
+            savePersonalizationToStorage();
+            updateRosterCounts();
             render();
         }
 
-        function addPriorityCharacter(character) {
-            if (!character || !DATA.meta.characters.includes(character)) return;
-            if (!state.priorityCharacters.includes(character)) {
-                state.priorityCharacters.push(character);
-                state.priorityCharacters.sort();
-                savePersonalizationToStorage();
+        function setCharacterPriority(character, priority) {
+            if (!DATA.meta.characters.includes(character)) return;
+            if (priority) {
+                if (!state.ownedCharacters.includes(character)) {
+                    state.ownedCharacters.push(character);
+                }
+                if (!state.priorityCharacters.includes(character)) {
+                    state.priorityCharacters.push(character);
+                }
+            } else {
+                state.priorityCharacters = state.priorityCharacters.filter(c => c !== character);
             }
-            renderPersonalizationChips();
+            state.ownedCharacters.sort();
+            state.priorityCharacters.sort();
+            state.focusedCharRole = null;
+            savePersonalizationToStorage();
+            updateRosterCounts();
             render();
+        }
+
+        function renderCharacterManager() {
+            const characters = getCharacterManagerList();
+            updateCharacterManagerActionLabels();
+            elements.charactersTable.innerHTML = characters.map(character => {
+                const ownedClass = isOwnedCharacter(character) ? 'status-btn active' : 'status-btn';
+                const priorityClass = isPriorityCharacter(character) ? 'status-btn priority active' : 'status-btn priority';
+                return `
+                    <tr>
+                        <td>${character}</td>
+                        <td><button type="button" class="${ownedClass}" data-toggle-owned="${character}">${isOwnedCharacter(character) ? 'Owned' : 'Not Owned'}</button></td>
+                        <td><button type="button" class="${priorityClass}" data-toggle-priority="${character}">${isPriorityCharacter(character) ? 'Priority' : 'Normal'}</button></td>
+                    </tr>
+                `;
+            }).join('');
+
+            elements.charactersTable.querySelectorAll('[data-toggle-owned]').forEach(el => {
+                el.addEventListener('click', () => {
+                    const character = el.dataset.toggleOwned;
+                    setCharacterOwned(character, !isOwnedCharacter(character));
+                });
+            });
+
+            elements.charactersTable.querySelectorAll('[data-toggle-priority]').forEach(el => {
+                el.addEventListener('click', () => {
+                    const character = el.dataset.togglePriority;
+                    setCharacterPriority(character, !isPriorityCharacter(character));
+                });
+            });
         }
 
         function populateMainStatDropdown() {
@@ -1241,30 +1332,64 @@
                 render();
             });
 
-            elements.ownedAddBtn.addEventListener('click', () => {
-                addOwnedCharacter(elements.ownedInput.value.trim());
-                elements.ownedInput.value = '';
+            elements.openCharacterManager.addEventListener('click', () => {
+                state.tab = 'characters';
+                state.focusedSubstat = null;
+                state.focusedCharRole = null;
+                state.characterSearch = '';
+                elements.characterSearch.value = '';
+                updateTabs();
+                render();
             });
 
-            elements.priorityAddBtn.addEventListener('click', () => {
-                addPriorityCharacter(elements.priorityInput.value.trim());
-                elements.priorityInput.value = '';
+            elements.characterSearch.addEventListener('input', (e) => {
+                state.characterSearch = e.target.value;
+                renderCharacterManager();
             });
 
-            elements.ownedInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    addOwnedCharacter(elements.ownedInput.value.trim());
-                    elements.ownedInput.value = '';
+            elements.clearCharacterSearch.addEventListener('click', () => {
+                state.characterSearch = '';
+                elements.characterSearch.value = '';
+                renderCharacterManager();
+            });
+
+            elements.setVisibleOwned.addEventListener('click', () => {
+                const visible = getCharacterManagerList();
+                const set = new Set(state.ownedCharacters);
+                visible.forEach(c => set.add(c));
+                state.ownedCharacters = [...set].sort();
+                savePersonalizationToStorage();
+                updateRosterCounts();
+                render();
+            });
+
+            elements.clearVisibleOwned.addEventListener('click', () => {
+                const visibleList = getCharacterManagerList();
+                if (visibleList.length === 0) return;
+                if (!hasActiveCharacterSearch()) {
+                    const confirmAll = window.confirm(
+                        `No search is active. This will unmark Owned for all ${visibleList.length} characters (and remove Priority from them). Continue?`
+                    );
+                    if (!confirmAll) return;
                 }
+                const visible = new Set(visibleList);
+                state.ownedCharacters = state.ownedCharacters.filter(c => !visible.has(c));
+                state.priorityCharacters = state.priorityCharacters.filter(c => state.ownedCharacters.includes(c));
+                savePersonalizationToStorage();
+                updateRosterCounts();
+                render();
             });
 
-            elements.priorityInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    addPriorityCharacter(elements.priorityInput.value.trim());
-                    elements.priorityInput.value = '';
-                }
+            elements.clearAllPriority.addEventListener('click', () => {
+                if (state.priorityCharacters.length === 0) return;
+                const confirmClear = window.confirm(
+                    `Clear Priority status for all ${state.priorityCharacters.length} prioritized characters?`
+                );
+                if (!confirmClear) return;
+                state.priorityCharacters = [];
+                savePersonalizationToStorage();
+                updateRosterCounts();
+                render();
             });
 
             elements.thresholdBtns.forEach(btn => {
@@ -1312,6 +1437,8 @@
             elements.workflowBrowse.classList.toggle('active', state.tab === 'browse');
             elements.workflowEvaluate.classList.toggle('active', state.tab === 'evaluate');
             elements.workflowOffset.classList.toggle('active', state.tab === 'offset');
+            elements.workflowCharacters.classList.toggle('active', state.tab === 'characters');
+            elements.mainLayout.classList.toggle('manage-mode', state.tab === 'characters');
 
             // Show/hide evaluate-specific filters
             elements.evaluateFilters.forEach(el => {
@@ -1320,7 +1447,7 @@
 
             // Hide set filter for off-set mode.
             elements.setRequiredFilters.forEach(el => {
-                el.style.display = state.tab === 'offset' ? 'none' : 'block';
+                el.style.display = (state.tab === 'offset' || state.tab === 'characters') ? 'none' : 'block';
             });
         }
 
@@ -1329,14 +1456,13 @@
                 renderBrowse();
             } else if (state.tab === 'evaluate') {
                 renderEvaluate();
-            } else {
+            } else if (state.tab === 'offset') {
                 renderOffsetEvaluate();
+            } else {
+                renderCharacterManager();
             }
+            updateRosterCounts();
             syncUrlToState();
-        }
-
-        function isPriorityCharacter(character) {
-            return state.priorityCharacters.includes(character);
         }
 
         function sortCharacters(chars) {
